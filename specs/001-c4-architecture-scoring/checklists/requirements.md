@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Architecture Scoring Agent
+# Specification Quality Checklist: C4 Graph Scoring
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-04-12
+**Created**: 2026-04-13
 **Feature**: [spec.md](./spec.md)
 
 ## Content Quality
@@ -32,4 +32,11 @@
 ## Notes
 
 - All items passed validation
-- Spec is ready for `/sp.clarify` or `/sp.plan`
+- Clarifications session completed with 5 questions answered:
+  1. Dependency weights: trigger=1, flow-to=3
+  2. Versioning: Git commit linked
+  3. Interface: CLI + REST API
+  4. Unknown stereotypes: Skip element
+  5. Circular dependencies: Apply penalty
+- Spec updated with FR-011 to FR-013 requirements
+- Spec ready for `/sp.clarify` or `/sp.plan`
