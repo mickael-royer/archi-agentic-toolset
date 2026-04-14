@@ -3,10 +3,10 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
-
+COPY pyproject.toml src/README.md ./
 COPY src/ ./src/
+
+RUN pip install --no-cache-dir .
 
 # Production stage - distroless
 FROM gcr.io/distroless/python3-debian12
