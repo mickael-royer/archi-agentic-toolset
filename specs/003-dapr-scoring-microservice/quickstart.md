@@ -29,7 +29,7 @@ podman-compose -f deploy/docker-compose.yaml build
 ### 3. Start with Podman Compose
 
 ```bash
-podman-compose up -d
+podman-compose -f deploy/docker-compose.yaml up -d
 ```
 
 This starts:
