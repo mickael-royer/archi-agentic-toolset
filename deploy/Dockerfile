@@ -3,7 +3,7 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-COPY src/pyproject.toml src/uv.lock ./
+COPY pyproject.toml uv.lock ./
 RUN pip install --target=/app/lib uv && \
     uv sync --frozen --no-dev --target /app/lib
 
