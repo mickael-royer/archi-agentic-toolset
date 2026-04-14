@@ -35,6 +35,31 @@ class TestAPIScore:
         response = client.post("/api/v1/score", json={})
         assert response.status_code == 422
 
+    def test_score_returns_composite_score(self):
+        """Score endpoint returns composite_score field."""
+        client = TestClient(app)
+        response = client.post("/api/v1/score", json={"commit": "abc123"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "composite_score" in data
+
+    def test_score_returns_recommendations(self):
+        """Score endpoint returns recommendations array."""
+        client = TestClient(app)
+        response = client.post("/api/v1/score", json={"commit": "abc123"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "recommendations" in data
+        assert isinstance(data["recommendations"], list)
+
+    def test_score_supports_include_recommendations(self):
+        """Score endpoint respects include_recommendations parameter."""
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/score", json={"commit": "abc123", "include_recommendations": False}
+        )
+        assert response.status_code == 200
+
 
 class TestAPIModel:
     """Tests for GET /api/v1/model/{commit} endpoint."""

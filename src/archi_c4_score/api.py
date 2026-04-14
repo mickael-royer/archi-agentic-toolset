@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from archi_c4_score import __version__
+from archi_c4_score.dapr_client import DaprStateClient, get_state_key
 
 app = FastAPI(
     title="C4 Architecture Scoring API",
@@ -33,6 +34,9 @@ class ScoreRequest(BaseModel):
     """Request body for score endpoint."""
 
     commit: str = Field(..., description="Git commit SHA")
+    include_recommendations: bool = Field(
+        default=True, description="Include recommendations in response"
+    )
 
 
 class ScoreResponse(BaseModel):
@@ -44,6 +48,7 @@ class ScoreResponse(BaseModel):
     container_scores: list[dict]
     component_scores: list[dict]
     recommendations: list[dict]
+    scored_at: str
 
 
 class ModelResponse(BaseModel):
@@ -93,13 +98,52 @@ async def import_model(request: ImportRequest) -> ImportResponse:
 @app.post("/api/v1/score", response_model=ScoreResponse)
 async def score_model(request: ScoreRequest) -> ScoreResponse:
     """Score an architecture at a specific commit."""
+    from datetime import datetime, timezone
+
+    state_client = DaprStateClient()
+    state_key = get_state_key(request.commit)
+
+    cached = state_client.get_state(state_key)
+    if cached:
+        return ScoreResponse(**cached)
+
+    recommendations: list[dict[str, str]] = []
+    if request.include_recommendations:
+        recommendations = [
+            {
+                "id": "REC-001",
+                "priority": "HIGH",
+                "dimension": "Coupling",
+                "target_node_id": "example",
+                "description": "Reduce efferent dependencies",
+                "rationale": "High instability detected",
+            }
+        ]
+
+    scored_at = datetime.now(timezone.utc).isoformat()
+
+    state_client.set_state(
+        state_key,
+        {
+            "commit": request.commit,
+            "composite_score": 85.0,
+            "system_scores": [],
+            "container_scores": [],
+            "component_scores": [],
+            "recommendations": recommendations,
+            "scored_at": scored_at,
+        },
+        ttl_seconds=3600,
+    )
+
     return ScoreResponse(
         commit=request.commit,
         composite_score=85.0,
         system_scores=[],
         container_scores=[],
         component_scores=[],
-        recommendations=[],
+        recommendations=recommendations,
+        scored_at=scored_at,
     )
 
 

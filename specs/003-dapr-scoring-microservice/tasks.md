@@ -77,17 +77,17 @@ description: "Task list for Dapr Scoring Microservice - TDD approach with contai
 
 ### Tests for User Story 2
 
-- [ ] T017 [P] [US2] Contract test for POST /api/v1/score with Dapr binding
-- [ ] T018 [P] [US2] Integration test for Dapr state store caching
+- [x] T017 [P] [US2] Contract test for POST /api/v1/score with Dapr binding
+- [x] T018 [P] [US2] Integration test for Dapr state store caching
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Install dapr/sdka-python in src/pyproject.toml
-- [ ] T020 [US2] Create Dapr client wrapper in src/archi_c4_score/dapr_client.py
-- [ ] T021 [US2] Implement state store caching in scoring endpoint
-- [ ] T022 [US2] Add Dapr service invocation support
-- [ ] T023 [US2] Configure Dapr observability (tracing, metrics)
-- [ ] T024 [US2] Test /dapr/health endpoint
+- [x] T019 [US2] Install dapr/sdka-python in src/pyproject.toml
+- [x] T020 [US2] Create Dapr client wrapper in src/archi_c4_score/dapr_client.py
+- [x] T021 [US2] Implement state store caching in scoring endpoint
+- [x] T022 [US2] Add Dapr service invocation support
+- [x] T023 [US2] Configure Dapr observability (tracing, metrics)
+- [x] T024 [US2] Test /dapr/health endpoint
 
 **Checkpoint**: Dapr sidecar enables state management and observability
 
@@ -101,17 +101,17 @@ description: "Task list for Dapr Scoring Microservice - TDD approach with contai
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Test container has no shell available
-- [ ] T026 [P] [US3] Test container image scan passes (trivy/grype)
+- [x] T025 [P] [US3] Test container has no shell available
+- [x] T026 [P] [US3] Test container image scan passes (trivy/grype)
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Verify Dockerfile uses gcr.io/distroless/python3-debian12
-- [ ] T028 [US3] Ensure no shell or package manager in production image
-- [ ] T029 [US3] Add non-root user in Dockerfile (security best practice)
-- [ ] T030 [US3] Configure read-only filesystem where possible
-- [ ] T031 [US3] Add health checks (HEALTHCHECK) in Dockerfile
-- [ ] T032 [US3] Run Trivy/Grype scan and document results
+- [x] T027 [US3] Verify Dockerfile uses gcr.io/distroless/python3-debian12
+- [x] T028 [US3] Ensure no shell or package manager in production image
+- [x] T029 [US3] Add non-root user in Dockerfile (security best practice)
+- [x] T030 [US3] Configure read-only filesystem where possible
+- [x] T031 [US3] Add health checks (HEALTHCHECK) in Dockerfile
+- [x] T032 [US3] Run Trivy/Grype scan and document results
 
 **Checkpoint**: Distroless image with no shell, security scan passes
 
@@ -121,13 +121,13 @@ description: "Task list for Dapr Scoring Microservice - TDD approach with contai
 
 **Purpose**: Final validation and documentation
 
-- [ ] T033 [P] Update deploy/README.md with local dev and production deployment
-- [ ] T034 [P] Validate quickstart.md commands work
-- [ ] T035 Run full test suite with coverage
-- [ ] T036 Run ruff linting and mypy type check
-- [ ] T037 Create Azure Container Apps deployment guide in deploy/aca/
-- [ ] T038 Create Bicep IaC files for Azure deployment
-- [ ] T039 Verify 80%+ test coverage meets QA requirements
+- [x] T033 [P] Update deploy/README.md with local dev and production deployment
+- [x] T034 [P] Validate quickstart.md commands work
+- [x] T035 Run full test suite with coverage
+- [x] T036 Run ruff linting and mypy type check
+- [x] T037 Create Azure Container Apps deployment guide in deploy/aca/
+- [x] T038 Create Bicep IaC files for Azure deployment
+- [x] T039 Verify 80%+ test coverage meets QA requirements
 
 ---
 
