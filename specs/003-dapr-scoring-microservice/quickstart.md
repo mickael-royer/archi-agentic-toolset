@@ -21,6 +21,11 @@ uv sync
 podman build -t scoring-service:latest -f deploy/Dockerfile .
 ```
 
+Or using docker-compose:
+```bash
+podman-compose -f deploy/docker-compose.yaml build
+```
+
 ### 3. Start with Podman Compose
 
 ```bash

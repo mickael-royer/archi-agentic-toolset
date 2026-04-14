@@ -3,11 +3,11 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-COPY ../src/pyproject.toml ../src/uv.lock ./
+COPY src/pyproject.toml src/uv.lock ./
 RUN pip install --target=/app/lib uv && \
     uv sync --frozen --no-dev --target /app/lib
 
-COPY ../src/ ./src/
+COPY src/ ./src/
 
 # Production stage - distroless
 FROM gcr.io/distroless/python3-debian12
