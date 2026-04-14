@@ -18,8 +18,7 @@ uv sync
 ### 2. Build Container Image
 
 ```bash
-cd deploy
-podman build -t scoring-service:latest .
+podman build -t scoring-service:latest -f deploy/Dockerfile .
 ```
 
 ### 3. Start with Podman Compose
