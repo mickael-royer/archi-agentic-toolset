@@ -3,16 +3,32 @@
 __version__ = "0.1.0"
 
 import logging
+import json
+import sys
+from datetime import datetime, timezone
 
-from archi_c4_score.models import C4Level, C4Node, C4Relationship
-from archi_c4_score.graph import Neo4jConnection, GraphQueries
-from archi_c4_score.parser import CoArchi2Parser
-from archi_c4_score.mapper import C4Mapper
+
+class DaprJsonFormatter(logging.Formatter):
+    """JSON formatter for Dapr observability."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_data = {
+            "time": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            log_data["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_data)
+
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
+for handler in logging.root.handlers:
+    handler.setFormatter(DaprJsonFormatter())
 
 __all__ = [
     "__version__",

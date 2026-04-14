@@ -1,0 +1,231 @@
+openapi: 3.0.3
+info:
+  title: C4 Architecture Scoring API
+  version: 1.0.0
+  description: Dapr-enabled microservice for scoring C4 architecture models
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /dapr/health:
+    get:
+      summary: Dapr sidecar health
+      operationId: daprHealthCheck
+      responses:
+        '200':
+          description: Dapr sidecar is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/score:
+    post:
+      summary: Score architecture at commit
+      operationId: scoreArchitecture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoringRequest'
+      responses:
+        '200':
+          description: Scoring complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoringResponse'
+
+  /api/v1/model/{commit}:
+    get:
+      summary: Get C4 model at commit
+      operationId: getModel
+      parameters:
+        - name: commit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponse'
+
+  /api/v1/history:
+    get:
+      summary: Get import history
+      operationId: getHistory
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: History retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryResponse'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, dapr-ready]
+
+    ScoringRequest:
+      type: object
+      required:
+        - commit
+      properties:
+        commit:
+          type: string
+          description: Git commit SHA
+        include_recommendations:
+          type: boolean
+          default: true
+
+    ScoringResponse:
+      type: object
+      properties:
+        commit:
+          type: string
+        composite_score:
+          type: number
+        system_scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemScore'
+        container_scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContainerScore'
+        component_scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComponentScore'
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recommendation'
+        scored_at:
+          type: string
+          format: date-time
+
+    SystemScore:
+      type: object
+      properties:
+        node_id:
+          type: string
+        node_name:
+          type: string
+        composite:
+          type: number
+
+    ContainerScore:
+      type: object
+      properties:
+        node_id:
+          type: string
+        node_name:
+          type: string
+        composite:
+          type: number
+        coupling:
+          type: number
+        component_count:
+          type: integer
+
+    ComponentScore:
+      type: object
+      properties:
+        node_id:
+          type: string
+        node_name:
+          type: string
+        composite:
+          type: number
+        coupling:
+          type: number
+        instability_index:
+          type: number
+        efferent_coupling:
+          type: integer
+        afferent_coupling:
+          type: integer
+
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: string
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        dimension:
+          type: string
+        target_node_id:
+          type: string
+        description:
+          type: string
+        rationale:
+          type: string
+
+    ModelResponse:
+      type: object
+      properties:
+        commit:
+          type: string
+        systems:
+          type: array
+          items:
+            type: object
+        containers:
+          type: array
+          items:
+            type: object
+        components:
+          type: array
+          items:
+            type: object
+
+    HistoryResponse:
+      type: object
+      properties:
+        commits:
+          type: array
+          items:
+            type: object
+            properties:
+              sha:
+                type: string
+              nodes:
+                type: integer
+              relationships:
+                type: integer
+              imported_at:
+                type: string
+                format: date-time

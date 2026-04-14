@@ -74,6 +74,12 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="healthy", version=__version__)
 
 
+@app.get("/dapr/health")
+async def dapr_health_check() -> dict[str, str]:
+    """Dapr sidecar health check - called by Dapr during startup."""
+    return {"status": "dapr-ready"}
+
+
 @app.post("/api/v1/import", response_model=ImportResponse)
 async def import_model(request: ImportRequest) -> ImportResponse:
     """Import a C4 model from a coArchi2 repository."""
