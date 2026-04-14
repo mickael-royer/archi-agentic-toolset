@@ -1,8 +1,11 @@
+version: "3"
+
 services:
   scoring-service:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    image: scoring-service:latest
     ports:
       - "8000:8000"
     environment:
@@ -10,6 +13,7 @@ services:
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=architoolset
       - DAPR_HTTP_PORT=3500
+      - DAPR_API_TOKEN=${DAPR_API_TOKEN:-token}
     depends_on:
       neo4j:
         condition: service_healthy
@@ -20,21 +24,17 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    dapr:
-      app-id: scoring-service
-      app-port: 8000
-      http-port: 3500
-      metrics-port: 9090
 
   dapr:
     image: daprio/dapr:latest
-    command: ./daprd --app-id scoring-service --app-port 8000 --dapr-http-port 3500 --metrics-port 9090
+    command: ./daprd --app-id scoring-service --app-port 8000 --dapr-http-port 3500 --metrics-port 9090 --runtime-token ${DAPR_API_TOKEN:-token}
     ports:
       - "3500:3500"
       - "9090:9090"
     volumes:
       - ./components:/components
-    network_mode: service:scoring-service
+    networks:
+      - dapr-network
 
   neo4j:
     image: neo4j:5
@@ -54,7 +54,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Placement service for Dapr (required for state management)
   dapr-placement:
     image: daprio/dapr:latest
     command: ./placement
@@ -63,9 +62,8 @@ services:
     networks:
       - dapr-network
 
-volumes:
-  neo4j-data:
-
 networks:
   dapr-network:
-    driver: bridge
+
+volumes:
+  neo4j-data:
