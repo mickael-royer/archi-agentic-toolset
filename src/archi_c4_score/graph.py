@@ -152,3 +152,111 @@ class GraphQueries:
         WHERE size(cycles) > 0
         RETURN n, cycles
         """
+
+    @staticmethod
+    def create_scored_commit(properties: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        """Generate ScoredCommit node creation query."""
+        props = ", ".join(f"sc.{k} = ${k}" for k in properties.keys())
+        query = f"""
+        CREATE (sc:ScoredCommit {{{props}}})
+        RETURN sc
+        """
+        return query, properties
+
+    @staticmethod
+    def find_scored_commits_by_repo(
+        repository_url: str,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> tuple[str, dict[str, Any]]:
+        """Find scored commits for a repository ordered by date."""
+        query = """
+        MATCH (sc:ScoredCommit)
+        WHERE sc.repository_url = $repository_url
+        RETURN sc
+        ORDER BY sc.commit_date ASC
+        SKIP $offset
+        LIMIT $limit
+        """
+        return query, {"repository_url": repository_url, "limit": limit, "offset": offset}
+
+    @staticmethod
+    def find_scored_commit_by_sha(
+        commit_sha: str,
+    ) -> tuple[str, dict[str, Any]]:
+        """Find scored commit by SHA."""
+        query = """
+        MATCH (sc:ScoredCommit)
+        WHERE sc.commit_sha = $commit_sha
+        RETURN sc
+        """
+        return query, {"commit_sha": commit_sha}
+
+    @staticmethod
+    def link_scored_commits(
+        from_sha: str,
+        to_sha: str,
+    ) -> tuple[str, dict[str, Any]]:
+        """Link two scored commits in chronological order."""
+        query = """
+        MATCH (sc1:ScoredCommit), (sc2:ScoredCommit)
+        WHERE sc1.commit_sha = $from_sha AND sc2.commit_sha = $to_sha
+        CREATE (sc1)-[:NEXT_COMMIT]->(sc2)
+        RETURN sc1, sc2
+        """
+        return query, {"from_sha": from_sha, "to_sha": to_sha}
+
+
+class ScoredCommitRepository:
+    """Repository for ScoredCommit operations."""
+
+    def __init__(self, connection: Neo4jConnection) -> None:
+        """Initialize repository with connection."""
+        self.connection = connection
+        self.queries = GraphQueries()
+
+    async def save(self, scored_commit: dict[str, Any]) -> dict[str, Any]:
+        """Save a scored commit to Neo4j."""
+        query, params = self.queries.create_scored_commit(scored_commit)
+        result = await self.connection.execute_query(query, params)
+        logger.info(f"Saved scored commit: {scored_commit.get('commit_sha', 'unknown')[:7]}")
+        return result[0] if result else {}
+
+    async def find_by_repository(
+        self,
+        repository_url: str,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Find all scored commits for a repository."""
+        query, params = self.queries.find_scored_commits_by_repo(repository_url, limit, offset)
+        result = await self.connection.execute_query(query, params)
+        return [record.get("sc", {}) for record in result]
+
+    async def find_by_sha(self, commit_sha: str) -> dict[str, Any] | None:
+        """Find a scored commit by SHA."""
+        query, params = self.queries.find_scored_commit_by_sha(commit_sha)
+        result = await self.connection.execute_query(query, params)
+        return result[0].get("sc") if result else None
+
+    async def link_commits(
+        self,
+        from_sha: str,
+        to_sha: str,
+    ) -> None:
+        """Link two commits in chronological order."""
+        query, params = self.queries.link_scored_commits(from_sha, to_sha)
+        await self.connection.execute_query(query, params)
+        logger.debug(f"Linked commits: {from_sha[:7]} -> {to_sha[:7]}")
+
+    async def setup_indexes(self) -> None:
+        """Create indexes for ScoredCommit nodes."""
+        await self.connection.execute_query("""
+            CREATE INDEX scored_commit_repo_date IF NOT EXISTS
+            FOR (sc:ScoredCommit) ON (sc.repository_url, sc.commit_date)
+        """)
+        await self.connection.execute_query("""
+            CREATE INDEX scored_commit_sha IF NOT EXISTS
+            FOR (sc:ScoredCommit) ON (sc.commit_sha)
+        """)
+        logger.info("Created indexes for ScoredCommit nodes")

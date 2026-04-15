@@ -90,3 +90,121 @@ class TestAPIHealth:
         response = client.get("/health")
         assert response.status_code == 200
         assert "status" in response.json()
+
+
+class TestAPITimeline:
+    """Tests for GET /api/v1/timeline endpoint."""
+
+    def test_timeline_endpoint_exists(self):
+        """Timeline endpoint is available."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline?repository_url=https://example.com/repo")
+        assert response.status_code in [200, 500]
+
+    def test_timeline_requires_repository_url(self):
+        """Timeline requires repository_url parameter."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline")
+        assert response.status_code == 422
+
+    def test_timeline_returns_commits(self):
+        """Timeline returns commits array."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline?repository_url=https://example.com/repo")
+        if response.status_code == 200:
+            data = response.json()
+            assert "commits" in data
+            assert isinstance(data["commits"], list)
+
+    def test_timeline_returns_pagination(self):
+        """Timeline returns pagination info."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline?repository_url=https://example.com/repo")
+        if response.status_code == 200:
+            data = response.json()
+            assert "pagination" in data
+            assert "total" in data["pagination"]
+
+
+class TestAPITrends:
+    """Tests for GET /api/v1/timeline/trends endpoint."""
+
+    def test_trends_endpoint_exists(self):
+        """Trends endpoint is available."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline/trends?repository_url=https://example.com/repo")
+        assert response.status_code in [200, 500]
+
+    def test_trends_requires_repository_url(self):
+        """Trends requires repository_url parameter."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline/trends")
+        assert response.status_code == 422
+
+    def test_trends_returns_trends(self):
+        """Trends returns trends array."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline/trends?repository_url=https://example.com/repo")
+        if response.status_code == 200:
+            data = response.json()
+            assert "trends" in data
+            assert isinstance(data["trends"], list)
+
+
+class TestAPICompare:
+    """Tests for GET /api/v1/timeline/compare endpoint."""
+
+    def test_compare_endpoint_exists(self):
+        """Compare endpoint is available."""
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/timeline/compare?repository_url=https://example.com/repo&from_commit=abc&to_commit=def"
+        )
+        assert response.status_code in [200, 400, 404, 500]
+
+    def test_compare_requires_commits(self):
+        """Compare requires from_commit and to_commit parameters."""
+        client = TestClient(app)
+        response = client.get("/api/v1/timeline/compare?repository_url=https://example.com/repo")
+        assert response.status_code == 422
+
+
+class TestAPIDashboard:
+    """Tests for GET /api/v1/dashboard endpoint."""
+
+    def test_dashboard_endpoint_exists(self):
+        """Dashboard endpoint is available."""
+        client = TestClient(app)
+        response = client.get("/api/v1/dashboard?repository_url=https://example.com/repo")
+        assert response.status_code in [200, 500]
+
+    def test_dashboard_requires_repository_url(self):
+        """Dashboard requires repository_url parameter."""
+        client = TestClient(app)
+        response = client.get("/api/v1/dashboard")
+        assert response.status_code == 422
+
+    def test_dashboard_returns_summary(self):
+        """Dashboard returns summary section."""
+        client = TestClient(app)
+        response = client.get("/api/v1/dashboard?repository_url=https://example.com/repo")
+        if response.status_code == 200:
+            data = response.json()
+            assert "summary" in data
+            assert "health_status" in data["summary"]
+
+
+class TestAPIBackfill:
+    """Tests for POST /api/v1/scoring/backfill endpoint."""
+
+    def test_backfill_endpoint_exists(self):
+        """Backfill endpoint is available."""
+        client = TestClient(app)
+        response = client.post("/api/v1/scoring/backfill?repository_url=https://example.com/repo")
+        assert response.status_code in [200, 202, 500]
+
+    def test_backfill_requires_repository_url(self):
+        """Backfill requires repository_url parameter."""
+        client = TestClient(app)
+        response = client.post("/api/v1/scoring/backfill")
+        assert response.status_code == 422

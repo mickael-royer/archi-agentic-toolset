@@ -115,3 +115,82 @@ class Repository:
         """Check if path is a git repository."""
         git_dir = self.path / ".git"
         return git_dir.exists() and git_dir.is_dir()
+
+    def get_commit_history(
+        self,
+        limit: int = 30,
+        skip: int = 0,
+    ) -> list[dict[str, str]]:
+        """Get commit history for the repository.
+
+        Returns list of commits with sha, author, date, message.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "log",
+                    f"--max-count={limit}",
+                    f"--skip={skip}",
+                    "--format=%H|%an|%aI|%s",
+                ],
+                cwd=self.path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            commits = []
+            for line in result.stdout.strip().split("\n"):
+                if line:
+                    parts = line.split("|", 3)
+                    if len(parts) >= 4:
+                        commits.append(
+                            {
+                                "sha": parts[0],
+                                "author": parts[1],
+                                "date": parts[2],
+                                "message": parts[3],
+                            }
+                        )
+            logger.info(f"Retrieved {len(commits)} commits from history")
+            return commits
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to get commit history: {e.stderr}")
+            raise RepositoryError(
+                "Failed to get commit history",
+                path=str(self.path),
+            )
+
+    def checkout_commit(self, commit_sha: str) -> None:
+        """Checkout a specific commit."""
+        try:
+            subprocess.run(
+                ["git", "checkout", commit_sha, "--quiet"],
+                cwd=self.path,
+                capture_output=True,
+                check=True,
+            )
+            logger.info(f"Checked out commit: {commit_sha[:7]}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to checkout commit: {e.stderr}")
+            raise RepositoryError(
+                f"Failed to checkout commit {commit_sha[:7]}",
+                path=str(self.path),
+            )
+
+    def iterate_commits(
+        self,
+        limit: int = 30,
+    ):
+        """Iterate over commits, yielding commit info.
+
+        Yields:
+            dict with sha, author, date, message keys
+        """
+        current_commit = self.get_current_commit()
+        try:
+            commits = self.get_commit_history(limit=limit)
+            for commit in commits:
+                yield commit
+        finally:
+            self.checkout_commit(current_commit)

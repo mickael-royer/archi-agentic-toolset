@@ -1,6 +1,5 @@
 """Integration tests for full pipeline."""
 
-
 from archi_c4_score.mapper import C4Mapper
 from archi_c4_score.parser import CoArchi2Parser
 
@@ -112,3 +111,80 @@ class TestPipelineIntegration:
         weights = {(r.source_id, r.target_id): r.weight for r in rels}
         assert weights[("a", "b")] == 3.0
         assert weights[("b", "a")] == 1.0
+
+
+class TestTimelinePerformance:
+    """Performance tests for timeline generation (SC-001)."""
+
+    def test_timeline_100_commits_under_30_seconds(self):
+        """SC-001: Timeline for 100 commits must complete in under 30 seconds."""
+        import time
+        from datetime import datetime, timedelta
+        from archi_c4_score.timeline import TimelineService
+
+        service = TimelineService()
+        base_date = datetime.now() - timedelta(days=100)
+
+        commits = [
+            {
+                "commit_sha": f"abc{i:03d}",
+                "repository_url": "https://github.com/example/repo",
+                "commit_date": (base_date + timedelta(days=i)).isoformat(),
+                "author": "Test Author",
+                "message": f"Commit {i}",
+                "composite_score": 70.0 + (i * 0.15),
+                "coupling_score": 80.0 - (i * 0.1),
+                "modularity_score": 70.0 + (i * 0.05),
+                "cohesion_score": 75.0,
+                "extensibility_score": 65.0 + (i * 0.05),
+                "maintainability_score": 72.0,
+                "element_count": 10 + i,
+                "relationship_count": 15 + (i * 2),
+            }
+            for i in range(100)
+        ]
+
+        start = time.perf_counter()
+        timeline = service.get_timeline("https://github.com/example/repo", commits, limit=100)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 30.0, f"Timeline generation took {elapsed:.2f}s, expected < 30s"
+        assert len(timeline.commits) == 100
+        assert timeline.pagination["total"] == 100
+
+    def test_trends_calculation_performance(self):
+        """Trend calculation for 100 commits completes quickly."""
+        import time
+        from datetime import datetime, timedelta
+        from archi_c4_score.timeline import TimelineService, TimelinePoint
+
+        service = TimelineService()
+        base_date = datetime.now()
+
+        points = [
+            TimelinePoint(
+                position=i,
+                sha=f"abc{i:03d}",
+                date=base_date + timedelta(days=i),
+                author="Test",
+                message=f"Commit {i}",
+                composite_score=70.0 + (i * 0.15),
+                dimensions={
+                    "coupling": 80.0 - (i * 0.1),
+                    "modularity": 70.0 + (i * 0.05),
+                    "cohesion": 75.0,
+                    "extensibility": 65.0 + (i * 0.05),
+                    "maintainability": 72.0,
+                },
+                element_count=10 + i,
+                relationship_count=15 + (i * 2),
+            )
+            for i in range(100)
+        ]
+
+        start = time.perf_counter()
+        trends = service.calculate_trends(points)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 1.0, f"Trend calculation took {elapsed:.2f}s, expected < 1s"
+        assert len(trends) == 5  # 5 dimensions

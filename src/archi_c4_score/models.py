@@ -127,3 +127,55 @@ class ScoringReport:
     container_scores: list[ContainerScore]
     component_scores: list[ComponentScore]
     recommendations: list[Recommendation]
+
+
+@dataclass
+class ScoredCommit:
+    """A commit with its architecture score data."""
+
+    id: str
+    commit_sha: str
+    repository_url: str
+    commit_date: datetime
+    author: str
+    message: str | None
+    composite_score: float
+    coupling_score: float
+    modularity_score: float
+    cohesion_score: float
+    extensibility_score: float
+    maintainability_score: float
+    element_count: int
+    relationship_count: int
+    scored_at: datetime
+
+
+@dataclass
+class TimelineReport:
+    """Timeline data with trends and analysis."""
+
+    repository_url: str
+    commits: list[ScoredCommit]
+    health_status: str
+    trends: list["TrendAnalysis"]
+    significant_changes: list["SignificantChange"]
+
+
+@dataclass
+class TrendAnalysis:
+    """Trend direction for a scoring dimension."""
+
+    dimension: str
+    direction: str
+    slope: float
+    confidence: float
+
+
+@dataclass
+class SignificantChange:
+    """Significant score change between commits."""
+
+    magnitude: float
+    direction: str
+    commit_sha: str
+    affected_dimensions: list[str]

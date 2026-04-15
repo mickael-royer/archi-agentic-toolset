@@ -1,0 +1,428 @@
+openapi: 3.1.0
+info:
+  title: ArchiMate Timeline Dashboard API
+  description: |
+    API for architecture timeline, trend analysis, and dashboard generation.
+    Extends the archi-c4-score service with historical analysis capabilities.
+  version: 1.0.0
+  contact:
+    name: ArchiToolset
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+paths:
+  /timeline:
+    get:
+      operationId: getTimeline
+      summary: Get architecture score timeline
+      description: Retrieve chronological history of architecture scores
+      parameters:
+        - name: repository_url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Git repository URL
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Timeline data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+
+  /timeline/trends:
+    get:
+      operationId: getTrends
+      summary: Get trend analysis
+      description: Calculate trend direction for each scoring dimension
+      parameters:
+        - name: repository_url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: start_commit
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: end_commit
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trend analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendsResponse'
+
+  /timeline/compare:
+    get:
+      operationId: compareCommits
+      summary: Compare two commits
+      description: Get element and relationship changes between two commits
+      parameters:
+        - name: repository_url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: from_commit
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Earlier commit SHA
+        - name: to_commit
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Later commit SHA
+      responses:
+        '200':
+          description: Commit comparison
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompareResponse'
+
+  /dashboard:
+    get:
+      operationId: generateDashboard
+      summary: Generate dashboard report
+      description: Generate Hugo-compatible dashboard report
+      parameters:
+        - name: repository_url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: output_format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, hugo]
+            default: json
+      responses:
+        '200':
+          description: Dashboard report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardReport'
+
+  /scoring/backfill:
+    post:
+      operationId: backfillHistory
+      summary: Trigger historical scoring
+      description: Start backfill of historical commits
+      parameters:
+        - name: repository_url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: commit_count
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 100
+      responses:
+        '202':
+          description: Backfill started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackfillResponse'
+
+components:
+  schemas:
+    TimelineResponse:
+      type: object
+      required: [commits, pagination]
+      properties:
+        repository_url:
+          type: string
+        commits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoredCommit'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TrendsResponse:
+      type: object
+      required: [trends]
+      properties:
+        repository_url:
+          type: string
+        trends:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendLine'
+        significant_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreDelta'
+
+    CompareResponse:
+      type: object
+      required: [from_commit, to_commit, diff]
+      properties:
+        from_commit:
+          $ref: '#/components/schemas/CommitSummary'
+        to_commit:
+          $ref: '#/components/schemas/CommitSummary'
+        diff:
+          $ref: '#/components/schemas/CommitDiff'
+        score_impact:
+          type: object
+          description: How changes affected scores
+
+    DashboardReport:
+      type: object
+      required: [generated_at, summary, commits, trends, concerns]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        repository:
+          type: object
+          properties:
+            url:
+              type: string
+            name:
+              type: string
+        summary:
+          type: object
+          properties:
+            health_status:
+              type: string
+              enum: [IMPROVING, DECLINING, STABLE]
+            commits_analyzed:
+              type: integer
+            date_range:
+              $ref: '#/components/schemas/DateRange'
+        commits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoredCommit'
+        trends:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendLine'
+        significant_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreDelta'
+        concerns:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/Concern'
+
+    ScoredCommit:
+      type: object
+      required: [sha, date, author, composite_score, dimensions]
+      properties:
+        sha:
+          type: string
+          description: Commit SHA (40 chars)
+        date:
+          type: string
+          format: date-time
+        author:
+          type: string
+        message:
+          type: string
+        composite_score:
+          type: number
+          minimum: 0
+          maximum: 100
+        dimensions:
+          type: object
+          properties:
+            coupling:
+              type: number
+            modularity:
+              type: number
+            cohesion:
+              type: number
+            extensibility:
+              type: number
+            maintainability:
+              type: number
+        element_count:
+          type: integer
+        relationship_count:
+          type: integer
+        score_delta:
+          type: number
+          description: Change from previous commit (null for first)
+        is_significant:
+          type: boolean
+
+    CommitSummary:
+      type: object
+      properties:
+        sha:
+          type: string
+        date:
+          type: string
+          format: date-time
+        composite_score:
+          type: number
+
+    CommitDiff:
+      type: object
+      properties:
+        elements:
+          type: object
+          properties:
+            added:
+              type: array
+              items:
+                $ref: '#/components/schemas/ElementChange'
+            removed:
+              type: array
+              items:
+                $ref: '#/components/schemas/ElementChange'
+        relationships:
+          type: object
+          properties:
+            added:
+              type: array
+              items:
+                $ref: '#/components/schemas/RelationshipChange'
+            removed:
+              type: array
+              items:
+                $ref: '#/components/schemas/RelationshipChange'
+
+    ElementChange:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+
+    RelationshipChange:
+      type: object
+      properties:
+        source_id:
+          type: string
+        target_id:
+          type: string
+        type:
+          type: string
+        weight:
+          type: number
+
+    TrendLine:
+      type: object
+      required: [dimension, direction]
+      properties:
+        dimension:
+          type: string
+          enum: [coupling, modularity, cohesion, extensibility, maintainability]
+        direction:
+          type: string
+          enum: [INCREASING, DECREASING, STABLE]
+        slope:
+          type: number
+        confidence:
+          type: number
+
+    ScoreDelta:
+      type: object
+      properties:
+        magnitude:
+          type: number
+        direction:
+          type: string
+          enum: [improvement, degradation]
+        commit:
+          type: string
+          description: Commit SHA
+        affected_dimensions:
+          type: array
+          items:
+            type: string
+
+    Concern:
+      type: object
+      properties:
+        dimension:
+          type: string
+        description:
+          type: string
+        magnitude:
+          type: number
+        introduced_at:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    DateRange:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+
+    BackfillResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [started]
+        commits_queued:
+          type: integer
+        estimated_duration_seconds:
+          type: integer

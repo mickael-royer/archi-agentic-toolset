@@ -1,0 +1,52 @@
+{{ $data := index .Site.Data "timeline" }}
+{{ if $data }}
+<div class="archi-timeline">
+  <canvas id="timelineChart"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const commits = {{ $data.commits | jsonify }};
+    const labels = commits.map(c => c.sha.substring(0,7));
+    const scores = commits.map(c => c.composite_score);
+    
+    new Chart(document.getElementById('timelineChart'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Composite Score',
+          data: scores,
+          borderColor: '#3498db',
+          backgroundColor: 'rgba(52, 152, 219, 0.1)',
+          fill: true,
+          tension: 0.1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Architecture Score Timeline'
+          }
+        },
+        scales: {
+          y: {
+            min: 0,
+            max: 100,
+            title: {
+              display: true,
+              text: 'Score'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Commit'
+            }
+          }
+        }
+      }
+    });
+  </script>
+</div>
+{{ end }}
