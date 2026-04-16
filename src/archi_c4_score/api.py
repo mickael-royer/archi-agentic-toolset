@@ -284,7 +284,7 @@ async def get_timeline(
     from archi_c4_score.timeline import TimelineService
 
     service = TimelineService()
-    scored_commits = _get_scored_commits(repository_url)
+    scored_commits = await _get_scored_commits(repository_url)
     timeline = service.get_timeline(repository_url, scored_commits, limit, offset)
 
     return TimelineResponse(
@@ -318,7 +318,7 @@ async def get_trends(
     from archi_c4_score.timeline import TimelineService
 
     service = TimelineService()
-    scored_commits = _get_scored_commits(repository_url)
+    scored_commits = await _get_scored_commits(repository_url)
     timeline = service.get_timeline(repository_url, scored_commits)
     trends = service.calculate_trends(timeline.commits)
 
@@ -355,8 +355,8 @@ async def compare_commits(
     from archi_c4_score.timeline import CommitComparator
 
     comparator = CommitComparator()
-    from_data = _get_commit_by_sha(repository_url, from_commit)
-    to_data = _get_commit_by_sha(repository_url, to_commit)
+    from_data = await _get_commit_by_sha(repository_url, from_commit)
+    to_data = await _get_commit_by_sha(repository_url, to_commit)
 
     if not from_data or not to_data:
         return CompareResponse(
@@ -410,7 +410,7 @@ async def generate_dashboard(
     from archi_c4_score.timeline import TimelineService
 
     service = TimelineService()
-    scored_commits = _get_scored_commits(repository_url)
+    scored_commits = await _get_scored_commits(repository_url)
     timeline = service.get_timeline(repository_url, scored_commits)
     trends = service.calculate_trends(timeline.commits)
 
@@ -529,7 +529,7 @@ async def backfill_history(
         )
 
 
-def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
+async def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
     """Get scored commits from Neo4j database."""
     import os
 
@@ -542,13 +542,9 @@ def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
     commits = []
     try:
         conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(conn.connect())
+        await conn.connect()
         repo = ScoredCommitRepository(conn)
-        records = asyncio.get_event_loop().run_until_complete(
-            repo.find_by_repository(repository_url, limit=limit)
-        )
+        records = await repo.find_by_repository(repository_url, limit=limit)
         for record in records:
             commits.append(
                 {
@@ -569,7 +565,7 @@ def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
                     "relationship_count": record.get("relationship_count", 0),
                 }
             )
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        await conn.close()
     except Exception as e:
         import logging
 
@@ -577,7 +573,7 @@ def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
     return commits
 
 
-def _get_commit_by_sha(repository_url: str, sha: str) -> dict | None:
+async def _get_commit_by_sha(repository_url: str, sha: str) -> dict | None:
     """Get commit data by SHA from Neo4j."""
     import os
 
@@ -589,12 +585,10 @@ def _get_commit_by_sha(repository_url: str, sha: str) -> dict | None:
 
     try:
         conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(conn.connect())
+        await conn.connect()
         repo = ScoredCommitRepository(conn)
-        record = asyncio.get_event_loop().run_until_complete(repo.find_by_sha(sha))
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        record = await repo.find_by_sha(sha)
+        await conn.close()
         if record:
             return {
                 "commit_sha": record.get("commit_sha", ""),
