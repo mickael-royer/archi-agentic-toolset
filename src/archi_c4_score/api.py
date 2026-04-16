@@ -469,19 +469,143 @@ async def backfill_history(
     repository_url: str,
     commit_count: int = 30,
 ) -> BackfillResponse:
-    """Trigger backfill of historical commits."""
-    return BackfillResponse(
-        status="started",
-        commits_queued=commit_count,
-        estimated_duration_seconds=commit_count * 2,
-    )
+    """Trigger backfill of historical commits to Neo4j."""
+    import logging
+    import os
+
+    logger = logging.getLogger(__name__)
+
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
+    neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
+    neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
+
+    from archi_c4_score.graph import Neo4jConnection, ScoredCommitRepository
+    from archi_c4_score.repository import Repository
+    from archi_c4_score.scoring import BackfillOrchestrator, ScoringEngine
+
+    try:
+        conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+        await conn.connect()
+
+        repo = ScoredCommitRepository(conn)
+        await repo.setup_indexes()
+
+        git_repo = Repository(path="/tmp/archi-model")
+        if not git_repo.is_git_repository():
+            git_repo.clone(repository_url)
+
+        orchestrator = BackfillOrchestrator(
+            scoring_engine=ScoringEngine(),
+            repository=git_repo,
+        )
+
+        scored_commits = orchestrator.backfill(repository_url, commit_count)
+
+        for commit_data in scored_commits:
+            await repo.save(commit_data)
+
+        await conn.close()
+
+        return BackfillResponse(
+            status="completed",
+            commits_queued=len(scored_commits),
+            estimated_duration_seconds=len(scored_commits) * 2,
+        )
+    except Exception as e:
+        logger.error(f"Backfill failed: {e}")
+        return BackfillResponse(
+            status="failed",
+            commits_queued=0,
+            estimated_duration_seconds=0,
+        )
 
 
-def _get_scored_commits(repository_url: str) -> list[dict]:
-    """Get scored commits from database (placeholder)."""
-    return []
+def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
+    """Get scored commits from Neo4j database."""
+    import os
+
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
+    neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
+    neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
+
+    from archi_c4_score.graph import Neo4jConnection, ScoredCommitRepository
+
+    commits = []
+    try:
+        conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+        import asyncio
+
+        asyncio.get_event_loop().run_until_complete(conn.connect())
+        repo = ScoredCommitRepository(conn)
+        records = asyncio.get_event_loop().run_until_complete(
+            repo.find_by_repository(repository_url, limit=limit)
+        )
+        for record in records:
+            commits.append(
+                {
+                    "commit_sha": record.get("commit_sha", ""),
+                    "repository_url": record.get("repository_url", repository_url),
+                    "commit_date": record.get("commit_date", ""),
+                    "author": record.get("author", "unknown"),
+                    "message": record.get("message"),
+                    "composite_score": record.get("composite_score", 0.0),
+                    "dimensions": {
+                        "coupling": record.get("coupling_score", 0.0),
+                        "modularity": record.get("modularity_score", 0.0),
+                        "cohesion": record.get("cohesion_score", 0.0),
+                        "extensibility": record.get("extensibility_score", 0.0),
+                        "maintainability": record.get("maintainability_score", 0.0),
+                    },
+                    "element_count": record.get("element_count", 0),
+                    "relationship_count": record.get("relationship_count", 0),
+                }
+            )
+        asyncio.get_event_loop().run_until_complete(conn.close())
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning(f"Failed to query Neo4j: {e}")
+    return commits
 
 
 def _get_commit_by_sha(repository_url: str, sha: str) -> dict | None:
-    """Get commit data by SHA (placeholder)."""
+    """Get commit data by SHA from Neo4j."""
+    import os
+
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
+    neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
+    neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
+
+    from archi_c4_score.graph import Neo4jConnection, ScoredCommitRepository
+
+    try:
+        conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+        import asyncio
+
+        asyncio.get_event_loop().run_until_complete(conn.connect())
+        repo = ScoredCommitRepository(conn)
+        record = asyncio.get_event_loop().run_until_complete(repo.find_by_sha(sha))
+        asyncio.get_event_loop().run_until_complete(conn.close())
+        if record:
+            return {
+                "commit_sha": record.get("commit_sha", ""),
+                "repository_url": record.get("repository_url", repository_url),
+                "commit_date": record.get("commit_date", ""),
+                "author": record.get("author", "unknown"),
+                "message": record.get("message"),
+                "composite_score": record.get("composite_score", 0.0),
+                "dimensions": {
+                    "coupling": record.get("coupling_score", 0.0),
+                    "modularity": record.get("modularity_score", 0.0),
+                    "cohesion": record.get("cohesion_score", 0.0),
+                    "extensibility": record.get("extensibility_score", 0.0),
+                    "maintainability": record.get("maintainability_score", 0.0),
+                },
+                "element_count": record.get("element_count", 0),
+                "relationship_count": record.get("relationship_count", 0),
+            }
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning(f"Failed to query Neo4j: {e}")
     return None
