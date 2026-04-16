@@ -474,6 +474,7 @@ async def backfill_history(
     import os
 
     logger = logging.getLogger(__name__)
+    logger.info(f"Starting backfill for {repository_url}, count={commit_count}")
 
     neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
     neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
@@ -486,13 +487,18 @@ async def backfill_history(
     try:
         conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
         await conn.connect()
+        logger.info(f"Connected to Neo4j at {neo4j_uri}")
 
-        repo = ScoredCommitRepository(conn)
-        await repo.setup_indexes()
+        repository = ScoredCommitRepository(conn)
+        await repository.setup_indexes()
+        logger.info("Neo4j indexes set up")
 
         git_repo = Repository(path="/tmp/archi-model")
         if not git_repo.is_git_repository():
+            logger.info(f"Cloning repository {repository_url}")
             git_repo.clone(repository_url)
+        else:
+            logger.info("Using existing cloned repository")
 
         orchestrator = BackfillOrchestrator(
             scoring_engine=ScoringEngine(),
@@ -500,11 +506,14 @@ async def backfill_history(
         )
 
         scored_commits = orchestrator.backfill(repository_url, commit_count)
+        logger.info(f"Generated {len(scored_commits)} scored commits")
 
         for commit_data in scored_commits:
-            await repo.save(commit_data)
+            await repository.save(commit_data)
+            logger.info(f"Saved commit {commit_data.get('commit_sha', '?')[:7]}")
 
         await conn.close()
+        logger.info(f"Backfill completed: {len(scored_commits)} commits")
 
         return BackfillResponse(
             status="completed",
@@ -512,7 +521,7 @@ async def backfill_history(
             estimated_duration_seconds=len(scored_commits) * 2,
         )
     except Exception as e:
-        logger.error(f"Backfill failed: {e}")
+        logger.error(f"Backfill failed: {e}", exc_info=True)
         return BackfillResponse(
             status="failed",
             commits_queued=0,

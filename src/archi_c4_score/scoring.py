@@ -181,7 +181,10 @@ class BackfillOrchestrator:
 
         Returns scored commit data ready for persistence.
         """
-        model_files = self.repository.find_model_files()
+        model_files = self.repository.find_model_files(pattern="*.archimate")
+        logger.info(
+            f"Found {len(model_files)} model files at commit {commit_info.get('sha', '?')[:7]}"
+        )
         element_count = 0
         relationship_count = 0
         composite_score = 50.0
@@ -190,6 +193,7 @@ class BackfillOrchestrator:
             element_count = 10
             relationship_count = 15
             composite_score = 75.0
+            logger.info(f"Scoring model with {element_count} elements")
 
         return {
             "id": str(uuid4()),
