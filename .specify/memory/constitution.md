@@ -123,7 +123,7 @@ Development and testing MUST use Podman for container orchestration. Podfiles or
 
 **Rationale**: Podman provides rootless containers that mirror Docker behavior while enhancing security. Consistent local environments reduce "works on my machine" issues.
 
-### XIX. Distroless Container Security
+### XVIII. Distroless Container Security
 
 All container images MUST use Distroless base images. Images MUST contain only application code and runtime dependencies. Shell access MUST NOT be available in production containers. Image scanning for vulnerabilities MUST be integrated into CI/CD pipelines. Container images MUST be signed and verified before deployment.
 

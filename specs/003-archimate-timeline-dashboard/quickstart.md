@@ -1,7 +1,7 @@
 # Quickstart: ArchiMate Timeline Dashboard
 
 **Date**: 2026-04-15
-**Feature**: 004-archimate-timeline-dashboard
+**Feature**: 003-archimate-timeline-dashboard
 
 ## Overview
 

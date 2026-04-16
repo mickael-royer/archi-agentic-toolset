@@ -75,6 +75,27 @@ cd src && uv run mypy src/archi_c4_score/
 cd src && uv run uvicorn archi_c4_score.api:app --reload
 ```
 
+## Troubleshooting
+
+### Dapr Health Check Shows "Not Ready" but Service Works
+
+If Dapr shows `ERR_HEALTH_NOT_READY` but scoring service is healthy, the issue is network connectivity between Dapr sidecar and the scoring service:
+
+```bash
+# Check metadata - look for channelAddress
+curl -s http://localhost:3500/v1.0/metadata | jq .appConnectionProperties
+# {"port":8000,"protocol":"http","channelAddress":"127.0.0.1"}  <- Problem
+```
+
+**Fix**: Add `--app-channel-address scoring-service` to the Dapr command in docker-compose.yaml. The container name gets resolved by Podman's internal DNS.
+
+### Check Status
+
+```bash
+podman-compose ps
+podman logs deploy_scoring-service_1
+```
+
 ## Stop Services
 
 ```bash

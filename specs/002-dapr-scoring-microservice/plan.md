@@ -1,6 +1,6 @@
 # Implementation Plan: [FEATURE]
 
-**Branch**: `003-dapr-scoring-microservice` | **Date**: 2026-04-14 | **Spec**: spec.md
+**Branch**: `002-dapr-scoring-microservice` | **Date**: 2026-04-14 | **Spec**: spec.md
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
 **Note**: This template is filled in by the `/sp.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -48,7 +48,7 @@ Package the archi-c4-score library as a containerized Dapr microservice running 
 ### Documentation (this feature)
 
 ```text
-specs/003-dapr-scoring-microservice/
+specs/002-dapr-scoring-microservice/
 ├── plan.md              # This file (/sp.plan command output)
 ├── research.md          # Phase 0 output (/sp.plan command)
 ├── data-model.md        # Phase 1 output (/sp.plan command)

@@ -1,21 +1,13 @@
-# Build stage
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY pyproject.toml src/README.md ./
 COPY src/ ./src/
 
-RUN pip install --no-cache-dir .
-
-# Production stage - distroless
-FROM gcr.io/distroless/python3-debian12
-
-WORKDIR /app
-
-COPY --from=builder /app/src /app/src
-
-USER nonroot
+RUN pip install --no-cache-dir -e .
 
 EXPOSE 8000
 

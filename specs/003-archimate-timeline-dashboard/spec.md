@@ -1,6 +1,6 @@
 # Feature Specification: ArchiMate Timeline Dashboard
 
-**Feature Branch**: `004-archimate-timeline-dashboard`  
+**Feature Branch**: `003-archimate-timeline-dashboard`  
 **Created**: 2026-04-15  
 **Status**: Draft  
 **Input**: User description: "Refactor Architectore Score service to assess Architecture Model changes based on commit history (eg. https://github.com/mickael-royer/archimate-ear/blob/main/model.archimate) to generate a dashboard with a timeline report"

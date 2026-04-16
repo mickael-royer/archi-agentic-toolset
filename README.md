@@ -8,11 +8,11 @@ Architecture scoring and analysis toolkit for ArchiMate models.
 
 Retrieve architecture models from version-controlled repositories, extract C4 models, store to Neo4j, and score based on complexity and dependency metrics.
 
-### Dapr Scoring Microservice (003-dapr-scoring-microservice)
+### Dapr Scoring Microservice (002-dapr-scoring-microservice)
 
 Containerized scoring service with Dapr integration for deployment on Podman (local) and Azure Container Apps (production).
 
-### ArchiMate Timeline Dashboard (004-archimate-timeline-dashboard)
+### ArchiMate Timeline Dashboard (003-archimate-timeline-dashboard)
 
 Track architecture changes over commit history and generate timeline dashboards with trend analysis.
 

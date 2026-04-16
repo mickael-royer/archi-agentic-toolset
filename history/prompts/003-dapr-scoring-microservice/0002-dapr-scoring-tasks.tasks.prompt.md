@@ -5,18 +5,18 @@ stage: tasks
 date: 2026-04-14
 surface: cli
 model: opencode/big-pickle
-feature: 003-dapr-scoring-microservice
-branch: 003-dapr-scoring-microservice
+feature: 002-dapr-scoring-microservice
+branch: 002-dapr-scoring-microservice
 user: developer
 command: /sp.tasks
 labels: [microservice, dapr, podman, container]
 links:
-  spec: specs/003-dapr-scoring-microservice/spec.md
+  spec: specs/002-dapr-scoring-microservice/spec.md
   ticket: null
   adr: null
   pr: null
 files:
-  - specs/003-dapr-scoring-microservice/tasks.md
+  - specs/002-dapr-scoring-microservice/tasks.md
 tests: []
 ---
 

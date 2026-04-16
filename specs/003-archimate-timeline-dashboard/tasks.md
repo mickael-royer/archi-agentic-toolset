@@ -5,7 +5,7 @@ description: "Task list for ArchiMate Timeline Dashboard feature implementation"
 
 # Tasks: ArchiMate Timeline Dashboard
 
-**Input**: Design documents from `/specs/004-archimate-timeline-dashboard/`
+**Input**: Design documents from `/specs/003-archimate-timeline-dashboard/`
 **Prerequisites**: plan.md, spec.md, data-model.md, contracts/timeline-api.yaml
 
 ## Format: `[ID] [P?] [Story] Description`

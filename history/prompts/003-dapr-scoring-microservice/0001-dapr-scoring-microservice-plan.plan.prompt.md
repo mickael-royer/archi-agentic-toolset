@@ -5,23 +5,23 @@ stage: plan
 date: 2026-04-14
 surface: cli
 model: opencode/big-pickle
-feature: 003-dapr-scoring-microservice
-branch: 003-dapr-scoring-microservice
+feature: 002-dapr-scoring-microservice
+branch: 002-dapr-scoring-microservice
 user: developer
 command: /sp.plan
 labels: [microservice, dapr, podman, container]
 links:
-  spec: specs/003-dapr-scoring-microservice/spec.md
+  spec: specs/002-dapr-scoring-microservice/spec.md
   ticket: null
   adr: null
   pr: null
 files:
-  - specs/003-dapr-scoring-microservice/plan.md
-  - specs/003-dapr-scoring-microservice/spec.md
-  - specs/003-dapr-scoring-microservice/research.md
-  - specs/003-dapr-scoring-microservice/data-model.md
-  - specs/003-dapr-scoring-microservice/quickstart.md
-  - specs/003-dapr-scoring-microservice/contracts/openapi.yaml
+  - specs/002-dapr-scoring-microservice/plan.md
+  - specs/002-dapr-scoring-microservice/spec.md
+  - specs/002-dapr-scoring-microservice/research.md
+  - specs/002-dapr-scoring-microservice/data-model.md
+  - specs/002-dapr-scoring-microservice/quickstart.md
+  - specs/002-dapr-scoring-microservice/contracts/openapi.yaml
 tests: []
 ---
 

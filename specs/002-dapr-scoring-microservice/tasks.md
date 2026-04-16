@@ -4,7 +4,7 @@ description: "Task list for Dapr Scoring Microservice - TDD approach with contai
 
 # Tasks: Dapr Scoring Microservice
 
-**Input**: Design documents from `/specs/003-dapr-scoring-microservice/`
+**Input**: Design documents from `/specs/002-dapr-scoring-microservice/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/openapi.yaml
 
 ## Format

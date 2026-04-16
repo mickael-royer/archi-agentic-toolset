@@ -1,7 +1,7 @@
 # Implementation Plan: ArchiMate Timeline Dashboard
 
-**Branch**: `004-archimate-timeline-dashboard` | **Date**: 2026-04-15 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/004-archimate-timeline-dashboard/spec.md`
+**Branch**: `003-archimate-timeline-dashboard` | **Date**: 2026-04-15 | **Spec**: [spec.md](./spec.md)
+**Input**: Feature specification from `/specs/003-archimate-timeline-dashboard/spec.md`
 
 ## Summary
 
@@ -40,7 +40,7 @@ Extend the existing `archi-c4-score` library to support architecture change anal
 ### Documentation (this feature)
 
 ```text
-specs/004-archimate-timeline-dashboard/
+specs/003-archimate-timeline-dashboard/
 ├── plan.md              # This file
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output

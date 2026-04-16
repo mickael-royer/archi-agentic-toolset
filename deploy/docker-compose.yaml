@@ -16,18 +16,21 @@ services:
       - DAPR_API_TOKEN=${DAPR_API_TOKEN:-token}
     depends_on:
       neo4j:
-        condition: service_healthy
+        condition: service_started
     networks:
       - dapr-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
       interval: 30s
       timeout: 10s
       retries: 3
 
   dapr:
     image: daprio/dapr:latest
-    command: ./daprd --app-id scoring-service --app-port 8000 --dapr-http-port 3500 --metrics-port 9090 --runtime-token ${DAPR_API_TOKEN:-token}
+    command: ./daprd --app-id scoring-service --app-port 8000 --dapr-http-port 3500 --metrics-port 9090 --app-channel-address scoring-service
+    depends_on:
+      scoring-service:
+        condition: service_started
     ports:
       - "3500:3500"
       - "9090:9090"
@@ -48,22 +51,21 @@ services:
       - neo4j-data:/data
     networks:
       - dapr-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   dapr-placement:
     image: daprio/dapr:latest
     command: ./placement
     ports:
-      - "5001:5000"
+      - "5050:5000"
     networks:
       - dapr-network
 
 networks:
   dapr-network:
+    driver: bridge
+    driver_opts:
+      isolate: "false"
+
 
 volumes:
   neo4j-data:
