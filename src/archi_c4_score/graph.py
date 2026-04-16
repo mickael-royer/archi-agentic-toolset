@@ -156,7 +156,7 @@ class GraphQueries:
     @staticmethod
     def create_scored_commit(properties: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         """Generate ScoredCommit node creation query."""
-        props = ", ".join(f"sc.{k} = ${k}" for k in properties.keys())
+        props = ", ".join(f"{k}: ${k}" for k in properties.keys())
         query = f"""
         CREATE (sc:ScoredCommit {{{props}}})
         RETURN sc
