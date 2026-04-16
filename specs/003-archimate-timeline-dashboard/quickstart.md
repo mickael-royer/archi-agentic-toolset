@@ -1,6 +1,6 @@
 # Quickstart: ArchiMate Timeline Dashboard
 
-**Date**: 2026-04-15
+**Date**: 2026-04-16
 **Feature**: 003-archimate-timeline-dashboard
 
 ## Overview
@@ -9,195 +9,127 @@ This feature generates architecture timeline dashboards for Hugo websites. It sc
 
 ## Prerequisites
 
-- Python 3.12+
-- `uv` package manager
-- Neo4j database (running)
+- Docker/Podman
+- Docker Compose/Podman Compose
 - Git repository with `model.archimate` file
 
-## Installation
+## Deployment
+
+### Start Services
 
 ```bash
-# Install from local development
-cd /Users/royerm/Dev/ArchiToolset
-uv pip install -e .
+cd deploy
+podman-compose up -d
 ```
 
-## CLI Usage
+Services:
+- API: http://localhost:8000
+- Neo4j: bolt://localhost:7687 (user: neo4j, password: architoolset)
 
-### Score Repository History
+## Workflow
+
+### Step 1: Trigger Backfill
+
+Before querying timeline, you must backfill scored commits:
 
 ```bash
-# Auto-backfill last 30 commits (default)
-archi-c4-score score-history \
-  --repo-url https://github.com/mickael-royer/archimate-ear \
-  --neo4j-uri bolt://localhost:7687
-
-# Custom commit range
-archi-c4-score score-history \
-  --repo-url https://github.com/mickael-royer/archimate-ear \
-  --commit-count 50
+curl -X POST "http://localhost:8000/api/v1/scoring/backfill?repository_url=https://github.com/mickael-royer/archimate-ear&commit_count=30"
 ```
 
-### View Timeline
+This will:
+1. Clone the repository to `/tmp/archi-model`
+2. Iterate through commits
+3. Score each commit with `*.archimate` files
+4. Save scores to Neo4j
+
+### Step 2: Query Timeline
 
 ```bash
-# Get timeline as JSON
-archi-c4-score timeline \
-  --repo-url https://github.com/mickael-royer/archimate-ear \
-  --json
-
-# View trends
-archi-c4-score trends \
-  --repo-url https://github.com/mickael-royer/archimate-ear
+curl "http://localhost:8000/api/v1/timeline?repository_url=https://github.com/mickael-royer/archimate-ear"
 ```
 
-### Compare Commits
+Response:
+```json
+{
+  "repository_url": "https://github.com/mickael-royer/archimate-ear",
+  "commits": [
+    {
+      "sha": "abc123",
+      "date": "2024-01-01T12:00:00Z",
+      "author": "John Doe",
+      "composite_score": 75.0,
+      "score_delta": null,
+      "is_significant": false
+    }
+  ],
+  "pagination": {
+    "total": 4,
+    "limit": 30,
+    "offset": 0,
+    "has_more": false
+  }
+}
+```
+
+### Step 3: Get Trends
 
 ```bash
-archi-c4-score compare \
-  --repo-url https://github.com/mickael-royer/archimate-ear \
-  --from abc123 \
-  --to def456
+curl "http://localhost:8000/api/v1/timeline/trends?repository_url=https://github.com/mickael-royer/archimate-ear"
 ```
 
-### Generate Dashboard
+### Step 4: Compare Commits
 
 ```bash
-# JSON output (programmatic)
-archi-c4-score dashboard \
-  --repo-url https://github.com/mickael-royer/archimate-ear \
-  --output-format json \
-  --output ./timeline-data.json
-
-# Hugo output (for site integration)
-archi-c4-score dashboard \
-  --repo-url https://github.com/mickael-royer/archimate-ear \
-  --output-format hugo \
-  --output ./hugo-site/
+curl "http://localhost:8000/api/v1/timeline/compare?repository_url=https://github.com/mickael-royer/archimate-ear&from_commit=abc123&to_commit=def456"
 ```
+
+### Step 5: Generate Dashboard
+
+```bash
+# JSON output
+curl "http://localhost:8000/api/v1/dashboard?repository_url=https://github.com/mickael-royer/archimate-ear&output_format=json"
+
+# Hugo output (generates files to output/ directory)
+curl "http://localhost:8000/api/v1/dashboard?repository_url=https://github.com/mickael-royer/archimate-ear&output_format=hugo"
+```
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/timeline` | Get timeline data |
+| GET | `/api/v1/timeline/trends` | Get trend analysis |
+| GET | `/api/v1/timeline/compare` | Compare two commits |
+| GET | `/api/v1/dashboard` | Generate dashboard report |
+| POST | `/api/v1/scoring/backfill` | Trigger historical scoring |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEO4J_URI` | `bolt://deploy_neo4j_1:7687` | Neo4j connection URI |
+| `NEO4J_USER` | `neo4j` | Neo4j username |
+| `NEO4J_PASSWORD` | `architoolset` | Neo4j password |
 
 ## Hugo Integration
 
-### Directory Structure
+### Generated Output Structure
 
 ```
-hugo-site/
+output/
 ├── data/
-│   └── timeline.json          # Generated timeline data
+│   └── timeline.json          # Timeline data for Hugo
 ├── content/
 │   └── architecture/
-│       └── timeline-report.md # Generated report content
+│       └── timeline-report.md
 └── layouts/
     └── shortcodes/
         └── archi-timeline.html # Chart.js shortcode
 ```
 
-### Generated Output
-
-#### `data/timeline.json`
-
-```json
-{
-  "generated": "2026-04-15T10:00:00Z",
-  "repository": {
-    "url": "https://github.com/mickael-royer/archimate-ear",
-    "name": "archimate-ear"
-  },
-  "summary": {
-    "health_status": "STABLE",
-    "commits_analyzed": 30,
-    "date_range": {
-      "start": "2026-03-01T00:00:00Z",
-      "end": "2026-04-15T00:00:00Z"
-    }
-  },
-  "commits": [
-    {
-      "sha": "abc123",
-      "date": "2026-04-01T12:00:00Z",
-      "author": "John Doe",
-      "composite_score": 85.0,
-      "dimensions": {
-        "coupling": 82.0,
-        "modularity": 88.0,
-        "cohesion": 85.0,
-        "extensibility": 80.0,
-        "maintainability": 87.0
-      },
-      "element_count": 42,
-      "relationship_count": 156,
-      "score_delta": null,
-      "is_significant": false
-    }
-  ],
-  "trends": [
-    {
-      "dimension": "coupling",
-      "direction": "DECREASING",
-      "slope": -0.12,
-      "confidence": 0.85
-    }
-  ],
-  "significant_changes": [
-    {
-      "magnitude": 12.5,
-      "direction": "improvement",
-      "commit": "def456",
-      "affected_dimensions": ["coupling", "maintainability"]
-    }
-  ],
-  "concerns": [
-    {
-      "dimension": "modularity",
-      "description": "Modularity score decreased 15 points in last 10 commits",
-      "magnitude": 75,
-      "introduced_at": "ghi789"
-    }
-  ]
-}
-```
-
-#### `layouts/shortcodes/archi-timeline.html`
-
-```html
-{{ $data := index .Site.Data "timeline" }}
-{{ if $data }}
-<div class="archi-timeline">
-  <canvas id="timelineChart"></canvas>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    const commits = {{ $data.commits | jsonify }};
-    const labels = commits.map(c => c.sha.substring(0,7));
-    const scores = commits.map(c => c.composite_score);
-    
-    new Chart(document.getElementById('timelineChart'), {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Composite Score',
-          data: scores,
-          borderColor: '#3498db',
-          tension: 0.1
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          y: { min: 0, max: 100 }
-        }
-      }
-    });
-  </script>
-</div>
-{{ end }}
-```
-
-#### Usage in Markdown
+### Usage in Hugo
 
 ```markdown
-# Architecture Timeline
-
 {{< archi-timeline >}}
 
 ## Trends
@@ -209,98 +141,61 @@ hugo-site/
 {{ end }}
 ```
 
-## API Usage
-
-### Start the service
-
-```bash
-# Using Dapr
-dapr run --app-id archi-timeline \
-  --app-port 8080 \
-  -- uv run uvicorn archi_c4_score.api:app
-
-# Direct
-uv run uvicorn archi_c4_score.api:app --port 8080
-```
-
-### Endpoints
-
-```bash
-# Get timeline
-curl "http://localhost:8080/api/v1/timeline?repository_url=https://github.com/example/repo"
-
-# Get trends
-curl "http://localhost:8080/api/v1/timeline/trends?repository_url=https://github.com/example/repo"
-
-# Compare commits
-curl "http://localhost:8080/api/v1/timeline/compare?repository_url=https://github.com/example/repo&from_commit=abc123&to_commit=def456"
-
-# Generate dashboard
-curl "http://localhost:8080/api/v1/dashboard?repository_url=https://github.com/example/repo"
-
-# Trigger backfill
-curl -X POST "http://localhost:8080/api/v1/scoring/backfill?repository_url=https://github.com/example/repo"
-```
-
-## CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-name: Architecture Timeline
-on:
-  push:
-    branches: [main]
-
-jobs:
-  dashboard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install uv
-      - run: uv pip install archi-c4-score
-      - run: |
-          archi-c4-score dashboard \
-            --repo-url ${{ github.server_url }}/${{ github.repository }} \
-            --output-format hugo \
-            --output ./hugo-site/
-      - uses: peaceiris/actions-hugo@v3
-        with:
-          hugo-version: 'latest'
-      - run: hugo -d ../public
-```
-
 ## Troubleshooting
-
-### Neo4j Connection Issues
-
-```bash
-# Check Neo4j is running
-curl http://localhost:7474
-
-# Verify connection
-archi-c4-score health --neo4j-uri bolt://localhost:7687
-```
 
 ### Empty Timeline
 
-- Verify repository has commits with `model.archimate` files
-- Check backfill completed: `archi-c4-score score-history --repo-url <url>`
-- Review logs for parse errors
+1. First run backfill:
+   ```bash
+   curl -X POST "http://localhost:8000/api/v1/scoring/backfill?repository_url=<your-repo>"
+   ```
 
-### Chart Not Rendering
+2. Check logs for errors:
+   ```bash
+   podman logs <container-name>
+   ```
 
-- Ensure Hugo is in server mode or run `hugo`
-- Check browser console for JavaScript errors
-- Verify Chart.js CDN is accessible
+3. Verify commits have `*.archimate` files
+
+### Neo4j Connection Failed
+
+1. Check Neo4j is running:
+   ```bash
+   podman ps | grep neo4j
+   ```
+
+2. Check container logs:
+   ```bash
+   podman logs deploy_neo4j_1
+   ```
+
+### Scoring Errors
+
+Check logs for:
+- "Failed to clone repository"
+- "Failed to checkout commit"
+- "Failed to score commit"
+- "Failed to query Neo4j"
+
+## Local Development
+
+```bash
+# Install dependencies
+uv pip install -e ".[dev]"
+
+# Run API
+uv run uvicorn archi_c4_score.api:app --port 8000
+
+# Run tests
+uv run pytest tests/
+
+# Lint
+uv run ruff check src/ tests/
+```
 
 ## Next Steps
 
-1. Configure repository URL in CLI or API
-2. Run initial backfill: `archi-c4-score score-history --repo-url <url>`
-3. Generate dashboard: `archi-c4-score dashboard --output-format hugo --output ./hugo-site/`
-4. Commit Hugo output to your site repository
-5. Add to CI/CD pipeline for automated updates
+1. Configure your repository URL
+2. Trigger backfill: `POST /api/v1/scoring/backfill`
+3. Query timeline: `GET /api/v1/timeline`
+4. Generate Hugo output for your site
