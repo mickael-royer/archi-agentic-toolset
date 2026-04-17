@@ -27,6 +27,7 @@ class HugoTimelineData:
     commits: list[dict[str, Any]]
     trends: list[dict[str, Any]]
     concerns: list[dict[str, Any]]
+    recommendations: dict[str, Any]
     schema_url: str = "https://architoolset.dev/schemas/timeline-v1.json"
 
 
@@ -101,6 +102,7 @@ class DashboardGenerator:
         trends: list[dict[str, Any]],
         health_status: str,
         significant_changes: list[dict[str, Any]],
+        recommendations: dict[str, Any] | None = None,
     ) -> HugoTimelineData:
         """Generate complete Hugo dashboard data."""
         repo_name = repository_url.rstrip("/").split("/")[-1]
@@ -129,6 +131,11 @@ class DashboardGenerator:
             commits=commits,
             trends=trends,
             concerns=concerns,
+            recommendations=recommendations
+            or {
+                "recommendations": [],
+                "llm_available": False,
+            },
         )
 
         self._write_json(data)
@@ -178,6 +185,7 @@ class DashboardGenerator:
             "commits": data.commits,
             "trends": data.trends,
             "concerns": data.concerns,
+            "recommendations": data.recommendations,
         }
 
         (self.data_dir / "timeline.json").write_text(json.dumps(output, indent=2, default=str))

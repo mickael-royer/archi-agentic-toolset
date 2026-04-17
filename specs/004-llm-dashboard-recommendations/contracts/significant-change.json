@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SignificantChange",
+  "description": "A commit with significant score change",
+  "type": "object",
+  "required": ["commit_sha", "date", "magnitude", "direction", "affected_dimensions"],
+  "properties": {
+    "commit_sha": {
+      "type": "string",
+      "description": "Git commit SHA",
+      "pattern": "^[a-f0-9]{7,40}$"
+    },
+    "date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Commit date"
+    },
+    "magnitude": {
+      "type": "number",
+      "description": "Absolute score change"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["IMPROVING", "DEGRADING"],
+      "description": "Whether score improved or degraded"
+    },
+    "affected_dimensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Dimensions affected by this change"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Recommendation",
+  "description": "AI-generated suggestion based on trend analysis",
+  "type": "object",
+  "required": ["id", "priority", "description", "impact"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier (e.g., REC-001)",
+      "pattern": "^REC-\\d{3}$"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["HIGH", "MEDIUM", "LOW"],
+      "description": "Priority level for the recommendation"
+    },
+    "dimension": {
+      "type": "string",
+      "description": "Which scoring dimension this addresses",
+      "enum": ["coupling", "modularity", "cohesion", "extensibility", "maintainability", "composite"]
+    },
+    "description": {
+      "type": "string",
+      "description": "The recommendation text in markdown format"
+    },
+    "impact": {
+      "type": "string",
+      "description": "Expected impact description (qualitative)"
+    },
+    "trend_refs": {
+      "type": "array",
+      "description": "References to specific trends or commits",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  }
+}

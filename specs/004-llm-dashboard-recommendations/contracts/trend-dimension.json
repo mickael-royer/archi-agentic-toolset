@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TrendDimension",
+  "description": "Trend data for a single scoring dimension",
+  "type": "object",
+  "required": ["dimension", "direction", "slope", "confidence"],
+  "properties": {
+    "dimension": {
+      "type": "string",
+      "enum": ["coupling", "modularity", "cohesion", "extensibility", "maintainability"],
+      "description": "Dimension name"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["INCREASING", "DECREASING", "STABLE"],
+      "description": "Overall trend direction"
+    },
+    "slope": {
+      "type": "number",
+      "description": "Rate of change per commit"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score"
+    },
+    "current_value": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Current score value"
+    },
+    "start_value": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Score at start of period"
+    },
+    "affected_commits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Commit SHAs that contributed to trend"
+    }
+  }
+}

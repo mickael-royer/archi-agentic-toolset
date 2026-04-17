@@ -5,6 +5,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from archi_c4_score.archimate_scorer import ArchimateScorer, ArchitectureMetrics
+from archi_c4_score.archimate_xml_parser import ArchimateXMLParser
+from archi_c4_score.parser import CoArchi2Parser
+
 if TYPE_CHECKING:
     from archi_c4_score.repository import Repository
 
@@ -185,15 +189,67 @@ class BackfillOrchestrator:
         logger.info(
             f"Found {len(model_files)} model files at commit {commit_info.get('sha', '?')[:7]}"
         )
-        element_count = 0
-        relationship_count = 0
-        composite_score = 50.0
 
-        if model_files:
-            element_count = 10
-            relationship_count = 15
-            composite_score = 75.0
-            logger.info(f"Scoring model with {element_count} elements")
+        if not model_files:
+            return {
+                "id": str(uuid4()),
+                "commit_sha": commit_info["sha"],
+                "repository_url": repository_url,
+                "commit_date": commit_info["date"],
+                "author": commit_info["author"],
+                "message": commit_info["message"],
+                "composite_score": 0.0,
+                "coupling_score": 0.0,
+                "modularity_score": 0.0,
+                "cohesion_score": 0.0,
+                "extensibility_score": 0.0,
+                "maintainability_score": 0.0,
+                "element_count": 0,
+                "relationship_count": 0,
+                "scored_at": datetime.utcnow().isoformat(),
+            }
+
+        scorer = ArchimateScorer()
+        xml_parser = ArchimateXMLParser()
+        json_parser = CoArchi2Parser()
+        all_metrics = []
+
+        for model_file in model_files:
+            try:
+                if model_file.suffix.lower() == ".archimate":
+                    model = xml_parser.parse_to_model(model_file)
+                else:
+                    model = json_parser.parse_file(model_file)
+                metrics = scorer.score_model(model)
+                all_metrics.append(metrics)
+                logger.info(
+                    f"Scored {model_file.name}: composite={metrics.composite_score:.1f}, "
+                    f"coupling={metrics.coupling:.1f}, modularity={metrics.modularity:.1f}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to score {model_file}: {e}")
+                continue
+
+        if not all_metrics:
+            return {
+                "id": str(uuid4()),
+                "commit_sha": commit_info["sha"],
+                "repository_url": repository_url,
+                "commit_date": commit_info["date"],
+                "author": commit_info["author"],
+                "message": commit_info["message"],
+                "composite_score": 0.0,
+                "coupling_score": 0.0,
+                "modularity_score": 0.0,
+                "cohesion_score": 0.0,
+                "extensibility_score": 0.0,
+                "maintainability_score": 0.0,
+                "element_count": 0,
+                "relationship_count": 0,
+                "scored_at": datetime.utcnow().isoformat(),
+            }
+
+        avg_metrics = self._average_metrics(all_metrics)
 
         return {
             "id": str(uuid4()),
@@ -202,13 +258,29 @@ class BackfillOrchestrator:
             "commit_date": commit_info["date"],
             "author": commit_info["author"],
             "message": commit_info["message"],
-            "composite_score": composite_score,
-            "coupling_score": 80.0,
-            "modularity_score": 70.0,
-            "cohesion_score": 75.0,
-            "extensibility_score": 65.0,
-            "maintainability_score": 72.0,
-            "element_count": element_count,
-            "relationship_count": relationship_count,
+            "composite_score": avg_metrics.composite_score,
+            "coupling_score": avg_metrics.coupling,
+            "modularity_score": avg_metrics.modularity,
+            "cohesion_score": avg_metrics.cohesion,
+            "extensibility_score": avg_metrics.extensibility,
+            "maintainability_score": avg_metrics.maintainability,
+            "element_count": avg_metrics.element_count,
+            "relationship_count": avg_metrics.relationship_count,
             "scored_at": datetime.utcnow().isoformat(),
         }
+
+    def _average_metrics(self, metrics_list: list) -> ArchitectureMetrics:
+        """Average multiple architecture metrics."""
+        count = len(metrics_list)
+        return ArchitectureMetrics(
+            element_count=sum(m.element_count for m in metrics_list) // count,
+            relationship_count=sum(m.relationship_count for m in metrics_list) // count,
+            container_count=sum(m.container_count for m in metrics_list) // count,
+            component_count=sum(m.component_count for m in metrics_list) // count,
+            coupling=sum(m.coupling for m in metrics_list) / count,
+            modularity=sum(m.modularity for m in metrics_list) / count,
+            cohesion=sum(m.cohesion for m in metrics_list) / count,
+            extensibility=sum(m.extensibility for m in metrics_list) / count,
+            maintainability=sum(m.maintainability for m in metrics_list) / count,
+            composite_score=sum(m.composite_score for m in metrics_list) / count,
+        )

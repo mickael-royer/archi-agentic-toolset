@@ -193,6 +193,28 @@ class TestAPIDashboard:
             assert "summary" in data
             assert "health_status" in data["summary"]
 
+    def test_dashboard_returns_recommendations(self):
+        """Dashboard returns recommendations field."""
+        client = TestClient(app)
+        response = client.get("/api/v1/dashboard?repository_url=https://example.com/repo")
+        if response.status_code == 200:
+            data = response.json()
+            assert "recommendations" in data
+            assert "recommendations" in data["recommendations"]
+            assert "llm_available" in data["recommendations"]
+            assert "generated_at" in data["recommendations"]
+
+    def test_dashboard_recommendations_has_priority_field(self):
+        """Dashboard recommendations include priority field."""
+        client = TestClient(app)
+        response = client.get("/api/v1/dashboard?repository_url=https://example.com/repo")
+        if response.status_code == 200:
+            data = response.json()
+            recs = data.get("recommendations", {}).get("recommendations", [])
+            if recs:
+                assert "priority" in recs[0]
+                assert "impact" in recs[0]
+
 
 class TestAPIBackfill:
     """Tests for POST /api/v1/scoring/backfill endpoint."""

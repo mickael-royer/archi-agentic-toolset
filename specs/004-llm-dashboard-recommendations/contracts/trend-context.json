@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TrendContext",
+  "description": "Trend data provided to LLM for generating recommendations",
+  "type": "object",
+  "required": ["repository_url", "repository_name", "date_range", "dimensions"],
+  "properties": {
+    "repository_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL of the repository"
+    },
+    "repository_name": {
+      "type": "string",
+      "description": "Name of the repository"
+    },
+    "date_range": {
+      "$ref": "date-range.json"
+    },
+    "dimensions": {
+      "type": "array",
+      "description": "Trend data per scoring dimension",
+      "items": {
+        "$ref": "trend-dimension.json"
+      },
+      "minItems": 1
+    },
+    "significant_changes": {
+      "type": "array",
+      "description": "Commits with significant score changes",
+      "items": {
+        "$ref": "significant-change.json"
+      },
+      "default": []
+    }
+  }
+}

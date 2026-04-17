@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DashboardResponse",
+  "description": "Response for dashboard endpoint (extended with recommendations)",
+  "type": "object",
+  "required": ["generated_at", "repository", "summary", "commits", "trends", "concerns", "recommendations"],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "health_status": { "type": "string" },
+        "commits_analyzed": { "type": "integer" },
+        "date_range": { "$ref": "date-range.json" }
+      }
+    },
+    "commits": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "trends": {
+      "type": "array",
+      "items": { "$ref": "trend-dimension.json" }
+    },
+    "concerns": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "recommendations": {
+      "$ref": "recommendation-set.json"
+    }
+  }
+}

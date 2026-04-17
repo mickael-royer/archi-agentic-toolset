@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DateRange",
+  "description": "Start and end dates for analysis",
+  "type": "object",
+  "required": ["start", "end"],
+  "properties": {
+    "start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Start of analysis period"
+    },
+    "end": {
+      "type": "string",
+      "format": "date-time",
+      "description": "End of analysis period"
+    }
+  }
+}

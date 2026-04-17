@@ -5,11 +5,16 @@ import os
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from archi_c4_score import __version__
 from archi_c4_score.dapr_client import DaprStateClient, get_state_key
 from archi_c4_score.github_importer import import_from_url
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +22,14 @@ app = FastAPI(
     title="C4 Architecture Scoring API",
     version=__version__,
     description="Score and analyze C4 architecture models stored in Neo4j",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -264,6 +277,28 @@ class DashboardResponse(BaseModel):
     commits: list[dict]
     trends: list[dict]
     concerns: list[dict]
+    recommendations: dict
+
+
+class RecommendationResponse(BaseModel):
+    """Single recommendation in API response."""
+
+    id: str
+    priority: str
+    dimension: str | None = None
+    description: str
+    impact: str
+    trend_refs: list[str] = []
+
+
+class RecommendationSetResponse(BaseModel):
+    """Collection of recommendations in API response."""
+
+    recommendations: list[RecommendationResponse]
+    llm_available: bool
+    generated_at: str
+    model_used: str | None = None
+    error_message: str | None = None
 
 
 class BackfillResponse(BaseModel):
@@ -404,8 +439,12 @@ async def compare_commits(
 async def generate_dashboard(
     repository_url: str,
     output_format: str = "json",
+    include_recommendations: bool = True,
 ) -> DashboardResponse:
     """Generate dashboard report."""
+    from datetime import datetime, timezone
+
+    from archi_c4_score.dashboard_service import get_recommendations_for_dashboard
     from archi_c4_score.hugo_export import DashboardGenerator
     from archi_c4_score.timeline import TimelineService
 
@@ -454,6 +493,21 @@ async def generate_dashboard(
         ],
     )
 
+    if include_recommendations:
+        recommendations_data = get_recommendations_for_dashboard(
+            repository_url=repository_url,
+            repository_name=hugo_data.repository.get("name", "repository"),
+            commits=timeline.commits,
+            trends=trends,
+            significant_changes=timeline.significant_changes,
+        )
+    else:
+        recommendations_data = {
+            "recommendations": [],
+            "llm_available": False,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     return DashboardResponse(
         generated_at=hugo_data.generated,
         repository=hugo_data.repository,
@@ -461,6 +515,7 @@ async def generate_dashboard(
         commits=hugo_data.commits,
         trends=hugo_data.trends,
         concerns=hugo_data.concerns,
+        recommendations=recommendations_data,
     )
 
 

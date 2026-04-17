@@ -297,10 +297,24 @@ def compare(ctx: click.Context, repo_url: str, from_commit: str, to_commit: str)
     default="json",
     help="Output format",
 )
+@click.option(
+    "--include-recommendations",
+    is_flag=True,
+    default=False,
+    help="Include AI-generated recommendations",
+)
 @click.pass_context
-def dashboard(ctx: click.Context, repo_url: str, output: str | None, output_format: str) -> None:
+def dashboard(
+    ctx: click.Context,
+    repo_url: str,
+    output: str | None,
+    output_format: str,
+    include_recommendations: bool,
+) -> None:
     """Generate dashboard report."""
     try:
+        from archi_c4_score.dashboard_service import get_recommendations_for_dashboard
+
         service = TimelineService()
         scored_commits = _get_mock_scored_commits()
         timeline_data = service.get_timeline(repo_url, scored_commits)
@@ -310,6 +324,16 @@ def dashboard(ctx: click.Context, repo_url: str, output: str | None, output_form
         health_status = generator.calculate_health_status(
             [{"direction": t.direction.value} for t in trends]
         )
+
+        recommendations_data = None
+        if include_recommendations:
+            recommendations_data = get_recommendations_for_dashboard(
+                repository_url=repo_url,
+                repository_name=repo_url.rstrip("/").split("/")[-1],
+                commits=timeline_data.commits,
+                trends=trends,
+                significant_changes=timeline_data.significant_changes,
+            )
 
         hugo_data = generator.generate(
             repository_url=repo_url,
@@ -344,6 +368,7 @@ def dashboard(ctx: click.Context, repo_url: str, output: str | None, output_form
                 }
                 for s in timeline_data.significant_changes
             ],
+            recommendations=recommendations_data,
         )
 
         output_json = ctx.obj.get("output_json")
@@ -355,6 +380,7 @@ def dashboard(ctx: click.Context, repo_url: str, output: str | None, output_form
                 "commits": hugo_data.commits,
                 "trends": hugo_data.trends,
                 "concerns": hugo_data.concerns,
+                "recommendations": hugo_data.recommendations,
             }
             if output:
                 Path(output).write_text(json.dumps(result, indent=2, default=str))
@@ -366,6 +392,20 @@ def dashboard(ctx: click.Context, repo_url: str, output: str | None, output_form
             click.echo(f"  Health Status: {health_status}")
             click.echo(f"  Commits Analyzed: {len(timeline_data.commits)}")
             click.echo(f"  Generated: {hugo_data.generated}")
+
+            if recommendations_data and recommendations_data.get("recommendations"):
+                click.echo("  Recommendations:")
+                for rec in recommendations_data["recommendations"]:
+                    priority_color = (
+                        "🔴"
+                        if rec["priority"] == "HIGH"
+                        else "🟡"
+                        if rec["priority"] == "MEDIUM"
+                        else "🟢"
+                    )
+                    click.echo(
+                        f"    {priority_color} [{rec['priority']}] {rec['description'][:60]}..."
+                    )
 
     except Exception as e:
         logger.error(f"Dashboard failed: {e}")
