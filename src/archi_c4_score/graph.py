@@ -155,10 +155,11 @@ class GraphQueries:
 
     @staticmethod
     def create_scored_commit(properties: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-        """Generate ScoredCommit node creation query."""
+        """Generate ScoredCommit node creation query with upsert."""
         props = ", ".join(f"{k}: ${k}" for k in properties.keys())
         query = f"""
-        CREATE (sc:ScoredCommit {{{props}}})
+        MERGE (sc:ScoredCommit {{commit_sha: $commit_sha, repository_url: $repository_url}})
+        SET sc += {{{props}}}
         RETURN sc
         """
         return query, properties
