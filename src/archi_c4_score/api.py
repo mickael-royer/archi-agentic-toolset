@@ -134,9 +134,16 @@ async def import_model(request: ImportRequest) -> ImportResponse:
             name = elem.name
             elem_type = elem.element_type
             doc = elem.documentation
+            stereotype = elem.stereotype or ""
             await conn.execute_query(
-                "MERGE (n:Element {id: $id}) SET n.name = $name, n.element_type = $type, n.documentation = $doc",
-                {"id": elem_id, "name": name, "type": elem_type, "doc": doc},
+                "MERGE (n:Element {id: $id}) SET n.name = $name, n.element_type = $type, n.documentation = $doc, n.stereotype = $stereotype",
+                {
+                    "id": elem_id,
+                    "name": name,
+                    "type": elem_type,
+                    "doc": doc,
+                    "stereotype": stereotype,
+                },
             )
             nodes_created += 1
 
@@ -278,6 +285,7 @@ class DashboardResponse(BaseModel):
     trends: list[dict]
     concerns: list[dict]
     recommendations: dict
+    c4_scoring: dict | None = None
 
 
 class RecommendationResponse(BaseModel):
@@ -508,6 +516,39 @@ async def generate_dashboard(
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    from archi_c4_score.scoring import BackfillOrchestrator, ScoringEngine
+    from archi_c4_score.treemap import generate_treemap
+
+    treemap_cells = []
+    if scored_commits:
+        commit_sha = scored_commits[-1].get("commit_sha")
+        orchestrator = BackfillOrchestrator(scoring_engine=ScoringEngine(), repository=None)
+        containers = await orchestrator.get_container_scores(repository_url, commit_sha)
+        treemap = generate_treemap(containers, system_id="system")
+        treemap_cells = [
+            {
+                "id": c.id,
+                "name": c.name,
+                "level": c.level,
+                "score": c.score,
+                "size": c.size,
+                "parent_id": c.parent_id,
+                "stereotype": c.stereotype,
+            }
+            for c in treemap
+        ]
+
+    c4_scoring_data = None
+    if scored_commits:
+        c4_scoring_data = {
+            "composite_score": scored_commits[-1].get("composite_score", 0),
+            "dimensions": scored_commits[-1].get("dimensions", {}),
+            "element_count": scored_commits[-1].get("element_count", 0),
+            "relationship_count": scored_commits[-1].get("relationship_count", 0),
+            "commit": scored_commits[-1].get("commit_sha", ""),
+            "treemap": treemap_cells,
+        }
+
     return DashboardResponse(
         generated_at=hugo_data.generated,
         repository=hugo_data.repository,
@@ -516,6 +557,7 @@ async def generate_dashboard(
         trends=hugo_data.trends,
         concerns=hugo_data.concerns,
         recommendations=recommendations_data,
+        c4_scoring=c4_scoring_data,
     )
 
 

@@ -80,6 +80,7 @@ class ArchiElement:
     element_type: str
     documentation: str = ""
     properties: dict = field(default_factory=dict)
+    stereotype: str = ""
 
 
 @dataclass
@@ -164,6 +165,8 @@ def parse_model_archimate(
                     if doc_elem is not None:
                         doc = doc_elem.text or ""
 
+                    stereotype = props.get("Stereotype", "")
+
                     yield (
                         ArchiElement(
                             id=elem.get("id", ""),
@@ -171,6 +174,7 @@ def parse_model_archimate(
                             element_type=ELEMENT_TYPE_MAP.get(element_type, element_type),
                             documentation=doc,
                             properties=props,
+                            stereotype=stereotype,
                         ),
                         "element",
                     )

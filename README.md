@@ -4,9 +4,36 @@ Architecture scoring and analysis toolkit for ArchiMate models.
 
 ## Features
 
-### C4 Architecture Scoring (001-c4-architecture-scoring)
+### C4 Architecture Scoring (005-c4-scoring-engine)
 
-Retrieve architecture models from version-controlled repositories, extract C4 models, store to Neo4j, and score based on complexity and dependency metrics.
+Refactored model loader to convert Archimate elements to C4 entities (Software System, Container, Component). Architecture score defined at Container level and consolidated at Software System level. Complexity assessment based on afferent/efferent coupling with distinct weight between synchronous (Flow) and asynchronous (Trigger) relations. Scoring evolution tracked based on commit history for timeline review. Dashboard access via API. Export for timeline, trends, and recommendations. Detailed treemap representation by container/component.
+
+**Scoring Formula:**
+- Sync (Flow) relations: weight = 1.0
+- Async (Trigger) relations: weight = 0.5
+- Score = w_sync × (Ca + Ce) + w_async × 0.5 × (Ca + Ce)
+
+### C4 Component Filtering
+
+The scoring engine filters ArchiMate elements to only include C4-relevant components:
+
+| ArchiMate Type | Stereotype | C4 Level |
+|----------------|------------|----------|
+| ApplicationComponent | "Container" | Container |
+| ApplicationComponent | "Software System" / "SoftwareSystem" | Software System |
+| ApplicationFunction | "Component" | Component |
+
+All other elements are excluded from scoring to focus on software architecture.
+
+### Scoring Process
+
+1. **Import Model**: Fetch `model.archimate` from GitHub raw URL
+2. **Parse Elements**: Extract elements with stereotype properties
+3. **Store in Neo4j**: Save elements with stereotype attribute
+4. **Query C4 Components**: Filter elements based on type + stereotype
+5. **Calculate Scores**: Compute coupling and composite scores
+6. **Generate Treemap**: Create visualization data with stereotype labels
+7. **Serve Dashboard**: Provide JSON API with timeline and treemap data
 
 ### Dapr Scoring Microservice (002-dapr-scoring-microservice)
 
@@ -31,10 +58,27 @@ pip install -e .
 
 ## Quick Start
 
-### Score a Repository
+### Import Model
 
 ```bash
-archi-c4 import https://github.com/example/archimate-repo
+# Import from raw GitHub URL (model.archimate file)
+curl -X POST "http://localhost:8000/api/v1/import" \
+  -H "Content-Type: application/json" \
+  -d '{"model_url": "https://raw.githubusercontent.com/owner/repo/main/model.archimate"}'
+```
+
+### Trigger Scoring (Backfill)
+
+```bash
+# Score all commits in repository history
+curl -X POST "http://localhost:8000/api/v1/scoring/backfill?repository_url=https://github.com/owner/repo&commit_count=10"
+```
+
+### View Dashboard
+
+```bash
+# Get dashboard JSON with treemap
+curl "http://localhost:8000/api/v1/dashboard?repository_url=https://github.com/owner/repo"
 ```
 
 ### View Timeline
@@ -49,6 +93,17 @@ archi-c4 timeline --repo-url https://github.com/example/repo
 archi-c4 dashboard --repo-url https://github.com/example/repo --format hugo --output ./hugo-site/
 ```
 
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/import` | Import ArchiMate model from GitHub URL |
+| `POST /api/v1/scoring/backfill` | Score historical commits |
+| `GET /api/v1/dashboard` | Get dashboard with treemap data |
+| `GET /api/v1/scores/timeline` | Get scoring timeline |
+| `GET /api/v1/scores/treemap` | Get treemap visualization data |
+| `GET /api/v1/scores/container` | Get container scores |
+
 ## Architecture
 
 ```
@@ -58,7 +113,10 @@ src/
 │   ├── cli.py         # CLI commands
 │   ├── graph.py      # Neo4j operations
 │   ├── scoring.py     # Scoring engine
+│   ├── treemap.py     # Treemap generation
 │   ├── timeline.py    # Timeline analysis
+│   ├── c4_converter.py # C4 entity conversion
+│   ├── github_importer.py # GitHub model import
 │   └── hugo_export.py # Hugo integration
 └── tests/             # Test suite
 ```

@@ -100,6 +100,7 @@ class ContainerScore:
     composite: float
     coupling: float
     component_count: int
+    stereotype: str = ""
 
 
 @dataclass
@@ -179,3 +180,29 @@ class SignificantChange:
     direction: str
     commit_sha: str
     affected_dimensions: list[str]
+
+
+@dataclass
+class TreemapCell:
+    """Cell data for treemap visualization."""
+
+    id: str
+    name: str
+    level: str
+    score: float
+    size: int
+    parent_id: str | None = None
+    stereotype: str = ""
+
+
+@dataclass
+class ScoreSnapshot:
+    """Point-in-time score record linked to a commit."""
+
+    id: str
+    commit_sha: str
+    repository_url: str
+    commit_date: datetime
+    system_score: float
+    container_scores_json: str
+    scored_at: datetime
