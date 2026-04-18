@@ -1,8 +1,8 @@
 {
   "$schema": "https://architoolset.dev/schemas/timeline-v1.json",
-  "generated": "2026-04-15T21:52:44.191044Z",
+  "generated": "2026-04-18T09:17:46.926888Z",
   "repository": {
-    "url": "https://example.com/repo",
+    "url": "https://github.com/test/repo",
     "name": "repo"
   },
   "summary": {
@@ -12,5 +12,11 @@
   },
   "commits": [],
   "trends": [],
-  "concerns": []
+  "concerns": [],
+  "recommendations": {
+    "recommendations": [],
+    "llm_available": false,
+    "generated_at": "2026-04-18T09:17:46.926876+00:00",
+    "error_message": "No commits available"
+  }
 }
