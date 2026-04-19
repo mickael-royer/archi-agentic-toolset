@@ -314,25 +314,42 @@ class BackfillOrchestrator:
             await conn.connect()
 
             query = """
-            MATCH (e:Element)
-            WHERE 
-                (e.element_type = 'ApplicationComponent' AND e.stereotype IN ['Container', 'Software System', 'SoftwareSystem'])
-                OR (e.element_type = 'ApplicationFunction' AND e.stereotype = 'Component')
-            RETURN e.id as node_id, e.name as node_name, e.element_type as element_type, e.stereotype as stereotype
-            ORDER BY e.stereotype, e.name
+            MATCH (e:Element {commit_sha: $commit_sha})
+            WHERE e.element_type = 'ApplicationComponent' 
+              AND e.stereotype IN ['Container', 'Software System', 'SoftwareSystem', 'System Software']
+            OPTIONAL MATCH (e)<-[r:RELATES {rel_type: 'Flow'}]-(other:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)-[r2:RELATES {rel_type: 'Flow'}]->(target:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)<-[r3:RELATES {rel_type: 'Triggering'}]-(other3:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)-[r4:RELATES {rel_type: 'Triggering'}]->(target4:Element {commit_sha: $commit_sha})
+            RETURN e.id as node_id, e.name as node_name, e.element_type as element_type, 
+                   e.stereotype as stereotype,
+                   count(DISTINCT other) + count(DISTINCT other3) as afferent_coupling,
+                   count(DISTINCT target) + count(DISTINCT target4) as efferent_coupling,
+                   count(DISTINCT target) as flow_out, count(DISTINCT other) as flow_in,
+                   count(DISTINCT target4) as trigger_out, count(DISTINCT other3) as trigger_in
+ORDER BY e.stereotype, e.name
             """
-            result = await conn.execute_query(query, {})
+            result = await conn.execute_query(query, {"commit_sha": commit_sha})
             for record in result:
-                element_type = record.get("element_type", "")
-                stereotype = record.get("stereotype", "")
-                coupling = 50.0
-                if element_type == "ApplicationComponent":
-                    if stereotype in ("Software System", "SoftwareSystem"):
-                        coupling = 40.0
-                    else:
-                        coupling = 60.0
-                elif element_type == "ApplicationFunction":
-                    coupling = 75.0
+                # Weight: Flow (sync) = 1.5, Triggering (async) = 1.0
+                flow_out = record.get("flow_out", 0) or 0
+                flow_in = record.get("flow_in", 0) or 0
+                trigger_out = record.get("trigger_out", 0) or 0
+                trigger_in = record.get("trigger_in", 0) or 0
+
+                weighted_total = (flow_in + flow_out) * 1.5 + (trigger_in + trigger_out) * 1.0
+
+                # Calculate coupling: 30-70 scale based on weighted dependencies
+                if weighted_total <= 1:
+                    coupling = 30.0
+                elif weighted_total <= 3:
+                    coupling = 40.0
+                elif weighted_total <= 6:
+                    coupling = 50.0
+                elif weighted_total <= 10:
+                    coupling = 60.0
+                else:
+                    coupling = 70.0
 
                 containers.append(
                     ContainerScore(
@@ -361,6 +378,114 @@ class BackfillOrchestrator:
             ]
 
         return containers
+
+    async def get_component_scores(
+        self,
+        repository_url: str,
+        commit_sha: str | None = None,
+    ) -> list:
+        """Get scores for all components.
+
+        Args:
+            repository_url: Git repository URL
+            commit_sha: Specific commit (optional)
+
+        Returns:
+            List of ComponentScore objects
+        """
+        from archi_c4_score.models import ComponentScore
+        import os
+
+        neo4j_uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
+        neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
+        neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
+
+        from archi_c4_score.graph import Neo4jConnection
+
+        components = []
+        try:
+            conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+            await conn.connect()
+
+            query = """
+            MATCH (e:Element {commit_sha: $commit_sha})
+            WHERE e.element_type = 'ApplicationFunction' AND e.stereotype = 'Component'
+            OPTIONAL MATCH (e)<-[r:RELATES {rel_type: 'Flow'}]-(other:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)-[r2:RELATES {rel_type: 'Flow'}]->(target:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)<-[r3:RELATES {rel_type: 'Triggering'}]-(other3:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)-[r4:RELATES {rel_type: 'Triggering'}]->(target4:Element {commit_sha: $commit_sha})
+            OPTIONAL MATCH (e)<-[r5:RELATES {rel_type: 'Assignment'}]-(container:Element {commit_sha: $commit_sha})
+            WHERE container.element_type = 'ApplicationComponent' AND container.stereotype IN ['Container', 'Software System', 'SoftwareSystem', 'System Software']
+            RETURN e.id as node_id, e.name as node_name,
+                   count(DISTINCT other) + count(DISTINCT other3) as afferent_coupling,
+                   count(DISTINCT target) + count(DISTINCT target4) as efferent_coupling,
+                   count(DISTINCT target) as flow_out, count(DISTINCT other) as flow_in,
+                   count(DISTINCT target4) as trigger_out, count(DISTINCT other3) as trigger_in,
+                   collect(DISTINCT container.name) as parents
+            ORDER BY e.name
+            """
+            result = await conn.execute_query(query, {"commit_sha": commit_sha})
+            for record in result:
+                afferent = record.get("afferent_coupling", 0) or 0
+                efferent = record.get("efferent_coupling", 0) or 0
+
+                # Weight: Flow (sync) = 1.5, Triggering (async) = 1.0
+                flow_out = record.get("flow_out", 0) or 0
+                flow_in = record.get("flow_in", 0) or 0
+                trigger_out = record.get("trigger_out", 0) or 0
+                trigger_in = record.get("trigger_in", 0) or 0
+
+                weighted_total = (flow_in + flow_out) * 1.5 + (trigger_in + trigger_out) * 1.0
+
+                # Calculate coupling: 30-70 scale based on weighted dependencies
+                if weighted_total <= 1:
+                    coupling = 30.0
+                elif weighted_total <= 3:
+                    coupling = 40.0
+                elif weighted_total <= 6:
+                    coupling = 50.0
+                elif weighted_total <= 10:
+                    coupling = 60.0
+                else:
+                    coupling = 70.0
+
+                total = afferent + efferent
+                instability = efferent / total if total > 0 else 0.5
+
+                parents = record.get("parents", []) or []
+                parent_str = ", ".join(parents) if parents else ""
+
+                components.append(
+                    ComponentScore(
+                        node_id=record.get("node_id", ""),
+                        node_name=record.get("node_name", "Unknown"),
+                        composite=100.0 - coupling,
+                        coupling=coupling,
+                        instability_index=instability,
+                        efferent_coupling=efferent,
+                        afferent_coupling=afferent,
+                        parent=parent_str,
+                    )
+                )
+
+            await conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to get components from Neo4j: {e}")
+
+        if not components:
+            return [
+                ComponentScore(
+                    node_id="component-sample",
+                    node_name="Sample Component",
+                    composite=70.0,
+                    coupling=75.0,
+                    instability_index=0.6,
+                    efferent_coupling=3,
+                    afferent_coupling=2,
+                )
+            ]
+
+        return components
 
     def get_system_score(
         self,

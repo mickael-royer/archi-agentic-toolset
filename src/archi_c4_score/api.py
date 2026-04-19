@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from archi_c4_score import __version__
 from archi_c4_score.dapr_client import DaprStateClient, get_state_key
 from archi_c4_score.github_importer import import_from_url
+from archi_c4_score.scoring import ScoringEngine
 
 from dotenv import load_dotenv
 
@@ -36,7 +37,11 @@ app.add_middleware(
 class ImportRequest(BaseModel):
     """Request body for import endpoint."""
 
-    model_url: str = Field(..., description="Direct URL to model.archimate file (raw GitHub URL)")
+    repository_url: str = Field(
+        ..., description="GitHub repository URL (e.g., https://github.com/owner/repo)"
+    )
+    clear_first: bool = Field(default=False, description="Clear existing data before import")
+    max_commits: int = Field(default=50, description="Maximum number of commits to import")
     neo4j_uri: str | None = None
     neo4j_user: str | None = None
     neo4j_password: str | None = None
@@ -107,69 +112,113 @@ async def dapr_health_check() -> dict[str, str]:
 
 @app.post("/api/v1/import", response_model=ImportResponse)
 async def import_model(request: ImportRequest) -> ImportResponse:
-    """Import a C4 model from a raw GitHub URL (model.archimate file)."""
+    """Import models from GitHub repository commit history."""
+    import logging
+    import httpx
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    owner_repo = request.repository_url.rstrip("/").replace("https://github.com/", "")
+    api_url = f"https://api.github.com/repos/{owner_repo}/commits"
+
+    neo4j_uri = request.neo4j_uri or os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
+    neo4j_user = request.neo4j_user or os.environ.get("NEO4J_USER", "neo4j")
+    neo4j_password = request.neo4j_password or os.environ.get("NEO4J_PASSWORD", "architoolset")
+
     from archi_c4_score.graph import Neo4jConnection
 
-    model = import_from_url(request.model_url)
+    if request.clear_first:
+        logger.info(f"Clearing existing data for {owner_repo}")
 
-    neo4j_uri = (
-        request.neo4j_uri
-        if request.neo4j_uri
-        else os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
-    )
-    neo4j_user = request.neo4j_user if request.neo4j_user else os.environ.get("NEO4J_USER", "neo4j")
-    neo4j_password = (
-        request.neo4j_password
-        if request.neo4j_password
-        else os.environ.get("NEO4J_PASSWORD", "architoolset")
-    )
+    commits_imported = 0
+    commits_skipped = 0
 
-    conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
-    await conn.connect()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        response = await client.get(
+            api_url, headers=headers, params={"per_page": request.max_commits}
+        )
+        response.raise_for_status()
+        commit_list = response.json()
 
-    try:
-        nodes_created = 0
-        for elem in model.elements:
-            elem_id = elem.id
-            name = elem.name
-            elem_type = elem.element_type
-            doc = elem.documentation
-            stereotype = elem.stereotype or ""
-            await conn.execute_query(
-                "MERGE (n:Element {id: $id}) SET n.name = $name, n.element_type = $type, n.documentation = $doc, n.stereotype = $stereotype",
-                {
-                    "id": elem_id,
-                    "name": name,
-                    "type": elem_type,
-                    "doc": doc,
-                    "stereotype": stereotype,
-                },
+        logger.info(f"Found {len(commit_list)} commits, connecting to Neo4j")
+
+        conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+        await conn.connect()
+
+        for commit_info in commit_list[: request.max_commits]:
+            commit_sha = commit_info["sha"]
+            commit_date = commit_info.get("commit", {}).get("committer", {}).get("date", "")
+
+            model_url = (
+                f"https://raw.githubusercontent.com/{owner_repo}/{commit_sha}/model.archimate"
             )
-            nodes_created += 1
 
-        rels_created = 0
-        for rel in model.relationships:
-            src = rel.source_id
-            tgt = rel.target_id
-            rel_type = rel.relationship_type.replace("-", "")
-            await conn.execute_query(
-                """
-                MATCH (a:Element {id: $source_id}), (b:Element {id: $target_id})
-                MERGE (a)-[r:RELATES]->(b)
-                SET r.id = $rel_id, r.rel_type = $rel_type
-                """,
-                {"source_id": src, "target_id": tgt, "rel_id": rel.id, "rel_type": rel_type},
-            )
-            rels_created += 1
+            try:
+                model_resp = await client.get(model_url)
+                if model_resp.status_code != 200:
+                    commits_skipped += 1
+                    continue
 
-        logger.info(f"Imported {nodes_created} nodes, {rels_created} relationships")
-    finally:
+                if request.clear_first:
+                    await conn.execute_query("MATCH (e:Element) DETACH DELETE e", {})
+
+                model = import_from_url(model_url)
+                nodes_created = 0
+                for elem in model.elements:
+                    await conn.execute_query(
+                        "MERGE (n:Element {id: $id}) SET n.name = $name, n.element_type = $type, n.stereotype = $stereotype",
+                        {
+                            "id": elem.id,
+                            "name": elem.name,
+                            "type": elem.element_type,
+                            "stereotype": elem.stereotype or "",
+                        },
+                    )
+                    nodes_created += 1
+
+                rels_created = 0
+                for rel in model.relationships:
+                    await conn.execute_query(
+                        """MATCH (a:Element {id: $source_id}), (b:Element {id: $target_id})
+                        MERGE (a)-[r:RELATES]->(b) SET r.rel_type = $rel_type""",
+                        {
+                            "source_id": rel.source_id,
+                            "target_id": rel.target_id,
+                            "rel_type": rel.relationship_type.replace("-", ""),
+                        },
+                    )
+                    rels_created += 1
+
+                await conn.execute_query(
+                    """MERGE (c:ScoredCommit {commit_sha: $sha})
+                    SET c.repository_url = $repo_url, c.commit_date = datetime($date),
+                        c.element_count = $elem_count, c.relationship_count = $rel_count""",
+                    {
+                        "sha": commit_sha,
+                        "repo_url": request.repository_url,
+                        "date": commit_date,
+                        "elem_count": nodes_created,
+                        "rel_count": rels_created,
+                    },
+                )
+
+                commits_imported += 1
+                logger.info(
+                    f"Imported {commit_sha[:7]}: {nodes_created} elements, {rels_created} relations"
+                )
+
+            except Exception as e:
+                logger.warning(f"Failed {commit_sha[:7]}: {e}")
+                commits_skipped += 1
+
         await conn.close()
 
     return ImportResponse(
-        commit=model.commit or "imported",
-        nodes_imported=nodes_created,
-        relationships_imported=rels_created,
+        commit=f"{commits_imported} imported, {commits_skipped} skipped",
+        nodes_imported=commits_imported,
+        relationships_imported=commits_skipped,
     )
 
 
@@ -466,6 +515,73 @@ async def generate_dashboard(
         [{"direction": t.direction.value} for t in trends]
     )
 
+    from archi_c4_score.scoring import BackfillOrchestrator, ScoringEngine
+    from archi_c4_score.treemap import generate_treemap
+
+    c4_scoring_data = None
+    treemap_cells = []
+    if scored_commits:
+        commit_sha = scored_commits[-1].get("commit_sha")
+        orchestrator = BackfillOrchestrator(scoring_engine=ScoringEngine(), repository=None)
+        containers = await orchestrator.get_container_scores(repository_url, commit_sha)
+        components = await orchestrator.get_component_scores(repository_url, commit_sha)
+        treemap = generate_treemap(containers, system_id="system")
+
+        treemap_cells = [
+            {
+                "id": c.id,
+                "name": c.name,
+                "level": c.level,
+                "score": c.score,
+                "size": c.size,
+                "parent_id": c.parent_id,
+                "stereotype": c.stereotype,
+            }
+            for c in treemap
+        ]
+
+        component_cells = [
+            {
+                "id": c.node_id,
+                "name": c.node_name,
+                "composite": c.composite,
+                "coupling": c.coupling,
+                "instability_index": c.instability_index,
+                "efferent_coupling": c.efferent_coupling,
+                "afferent_coupling": c.afferent_coupling,
+                "parent": c.parent,
+            }
+            for c in components
+        ]
+
+        # Calculate dimensions from Neo4j data for consistency with treemap/components
+        if containers or components:
+            all_coupling = [c.coupling for c in containers] + [c.coupling for c in components]
+            avg_coupling = sum(all_coupling) / len(all_coupling) if all_coupling else 50.0
+
+            dimensions = {
+                "coupling": avg_coupling,
+                "modularity": 100.0 - avg_coupling,
+                "cohesion": 50.0 + (10 - abs(avg_coupling - 50)) / 2,
+                "extensibility": 65.0,
+                "maintainability": 70.0 - (avg_coupling - 30) * 0.3,
+            }
+            composite = 100.0 - avg_coupling
+        else:
+            dimensions = {}
+            avg_coupling = 50.0
+            composite = 0
+
+        c4_scoring_data = {
+            "composite_score": composite,
+            "dimensions": dimensions,
+            "element_count": scored_commits[-1].get("element_count", 0),
+            "relationship_count": scored_commits[-1].get("relationship_count", 0),
+            "commit": commit_sha,
+            "treemap": treemap_cells,
+            "components": component_cells,
+        }
+
     hugo_data = generator.generate(
         repository_url=repository_url,
         commits=[
@@ -499,6 +615,7 @@ async def generate_dashboard(
             }
             for s in timeline.significant_changes
         ],
+        c4_scoring=c4_scoring_data,
     )
 
     if include_recommendations:
@@ -514,39 +631,6 @@ async def generate_dashboard(
             "recommendations": [],
             "llm_available": False,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-    from archi_c4_score.scoring import BackfillOrchestrator, ScoringEngine
-    from archi_c4_score.treemap import generate_treemap
-
-    treemap_cells = []
-    if scored_commits:
-        commit_sha = scored_commits[-1].get("commit_sha")
-        orchestrator = BackfillOrchestrator(scoring_engine=ScoringEngine(), repository=None)
-        containers = await orchestrator.get_container_scores(repository_url, commit_sha)
-        treemap = generate_treemap(containers, system_id="system")
-        treemap_cells = [
-            {
-                "id": c.id,
-                "name": c.name,
-                "level": c.level,
-                "score": c.score,
-                "size": c.size,
-                "parent_id": c.parent_id,
-                "stereotype": c.stereotype,
-            }
-            for c in treemap
-        ]
-
-    c4_scoring_data = None
-    if scored_commits:
-        c4_scoring_data = {
-            "composite_score": scored_commits[-1].get("composite_score", 0),
-            "dimensions": scored_commits[-1].get("dimensions", {}),
-            "element_count": scored_commits[-1].get("element_count", 0),
-            "relationship_count": scored_commits[-1].get("relationship_count", 0),
-            "commit": scored_commits[-1].get("commit_sha", ""),
-            "treemap": treemap_cells,
         }
 
     return DashboardResponse(
@@ -573,7 +657,7 @@ async def backfill_history(
     logger = logging.getLogger(__name__)
     logger.info(f"Starting backfill for {repository_url}, count={commit_count}")
 
-    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
     neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
     neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
 
@@ -626,11 +710,156 @@ async def backfill_history(
         )
 
 
+@app.post("/api/v1/sync/github", response_model=BackfillResponse)
+async def sync_github_commits(
+    repository_url: str,
+    branch: str = "main",
+    model_filename: str = "model.archimate",
+) -> BackfillResponse:
+    """Fetch all commits from GitHub main branch and import models to Neo4j."""
+    import logging
+    import os
+    import httpx
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting GitHub sync for {repository_url}, branch={branch}")
+
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
+    neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
+    neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
+
+    from archi_c4_score.graph import Neo4jConnection
+
+    owner_repo = repository_url.rstrip("/").replace("https://github.com/", "")
+    api_url = f"https://api.github.com/repos/{owner_repo}/commits"
+
+    commits_imported = 0
+    commits_failed = 0
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            headers = {"Accept": "application/vnd.github.v3+json"}
+            response = await client.get(api_url, headers=headers, params={"per_page": 100})
+            response.raise_for_status()
+            commits = response.json()
+
+            logger.info(f"Found {len(commits)} commits on {branch}")
+
+            conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+            await conn.connect()
+
+            for commit_info in commits:
+                commit_sha = commit_info["sha"]
+                commit_date = commit_info.get("commit", {}).get("committer", {}).get("date", "")
+
+                model_url = (
+                    f"https://raw.githubusercontent.com/{owner_repo}/{commit_sha}/{model_filename}"
+                )
+                logger.info(f"Trying {commit_sha[:7]}: {model_url}")
+
+                try:
+                    model_resp = await client.get(model_url)
+                    if model_resp.status_code != 200:
+                        logger.warning(f"No {model_filename} at {commit_sha[:7]}, skipping")
+                        commits_failed += 1
+                        continue
+
+                    model = import_from_url(model_url)
+
+                    from archi_c4_score.archimate_scorer import ArchimateScorer as Scorer
+
+                    scorer = Scorer()
+                    metrics = scorer.score_model(model)
+
+                    nodes_created = 0
+                    for elem in model.elements:
+                        await conn.execute_query(
+                            "MERGE (n:Element {id: $id, commit_sha: $commit_sha}) SET n.name = $name, n.element_type = $type, n.stereotype = $stereotype",
+                            {
+                                "id": elem.id,
+                                "name": elem.name,
+                                "type": elem.element_type,
+                                "stereotype": elem.stereotype or "",
+                                "commit_sha": commit_sha,
+                            },
+                        )
+                        nodes_created += 1
+
+                    rels_created = 0
+                    for rel in model.relationships:
+                        await conn.execute_query(
+                            """MERGE (a:Element {id: $source_id, commit_sha: $commit_sha})
+                            MERGE (b:Element {id: $target_id, commit_sha: $commit_sha})
+                            MERGE (a)-[r:RELATES]->(b) SET r.rel_type = $rel_type""",
+                            {
+                                "source_id": rel.source_id,
+                                "target_id": rel.target_id,
+                                "rel_type": rel.relationship_type.replace("-", ""),
+                                "commit_sha": commit_sha,
+                            },
+                        )
+                        rels_created += 1
+
+                    await conn.execute_query(
+                        """MERGE (c:ScoredCommit {commit_sha: $sha})
+                        SET c.repository_url = $repo_url,
+                            c.commit_date = datetime($date),
+                            c.scored_at = datetime($date),
+                            c.element_count = $elem_count,
+                            c.relationship_count = $rel_count,
+                            c.composite_score = $composite_score,
+                            c.coupling = $coupling,
+                            c.modularity = $modularity,
+                            c.cohesion = $cohesion,
+                            c.extensibility = $extensibility,
+                            c.maintainability = $maintainability""",
+                        {
+                            "sha": commit_sha,
+                            "repo_url": repository_url,
+                            "date": commit_date,
+                            "elem_count": nodes_created,
+                            "rel_count": rels_created,
+                            "composite_score": metrics.composite_score,
+                            "coupling": metrics.coupling,
+                            "modularity": metrics.modularity,
+                            "cohesion": metrics.cohesion,
+                            "extensibility": metrics.extensibility,
+                            "maintainability": metrics.maintainability,
+                        },
+                    )
+
+                    commits_imported += 1
+                    logger.info(
+                        f"Imported {commit_sha[:7]}: {nodes_created} elements, {rels_created} relations"
+                    )
+
+                except Exception as e:
+                    logger.warning(f"Failed to import {commit_sha[:7]}: {e}")
+                    commits_failed += 1
+
+            await conn.close()
+            logger.info(f"Sync completed: {commits_imported} imported, {commits_failed} failed")
+
+            return BackfillResponse(
+                status="completed",
+                commits_queued=commits_imported,
+                estimated_duration_seconds=commits_imported * 2,
+            )
+
+        except Exception as e:
+            logger.error(f"GitHub sync failed: {e}", exc_info=True)
+            return BackfillResponse(
+                status="failed",
+                commits_queued=0,
+                estimated_duration_seconds=0,
+            )
+
+
 async def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict]:
     """Get scored commits from Neo4j database."""
     import os
 
-    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
     neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
     neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
 
@@ -643,6 +872,16 @@ async def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict
         repo = ScoredCommitRepository(conn)
         records = await repo.find_by_repository(repository_url, limit=limit)
         for record in records:
+            composite_score = record.get("composite_score")
+            dims = {}
+            if composite_score is not None:
+                dims = {
+                    "coupling": record.get("coupling"),
+                    "modularity": record.get("modularity"),
+                    "cohesion": record.get("cohesion"),
+                    "extensibility": record.get("extensibility"),
+                    "maintainability": record.get("maintainability"),
+                }
             commits.append(
                 {
                     "commit_sha": record.get("commit_sha", ""),
@@ -650,14 +889,8 @@ async def _get_scored_commits(repository_url: str, limit: int = 30) -> list[dict
                     "commit_date": record.get("commit_date", ""),
                     "author": record.get("author", "unknown"),
                     "message": record.get("message"),
-                    "composite_score": record.get("composite_score", 0.0),
-                    "dimensions": {
-                        "coupling": record.get("coupling_score", 0.0),
-                        "modularity": record.get("modularity_score", 0.0),
-                        "cohesion": record.get("cohesion_score", 0.0),
-                        "extensibility": record.get("extensibility_score", 0.0),
-                        "maintainability": record.get("maintainability_score", 0.0),
-                    },
+                    "composite_score": composite_score,
+                    "dimensions": dims,
                     "element_count": record.get("element_count", 0),
                     "relationship_count": record.get("relationship_count", 0),
                 }
@@ -674,7 +907,7 @@ async def _get_commit_by_sha(repository_url: str, sha: str) -> dict | None:
     """Get commit data by SHA from Neo4j."""
     import os
 
-    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://deploy_neo4j_1:7687")
+    neo4j_uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
     neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
     neo4j_password = os.environ.get("NEO4J_PASSWORD", "architoolset")
 
