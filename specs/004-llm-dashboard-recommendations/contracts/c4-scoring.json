@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "C4Scoring",
+  "description": "C4 model scoring data with treemap and components",
+  "type": "object",
+  "required": ["composite_score", "dimensions", "commit"],
+  "properties": {
+    "composite_score": {
+      "type": "number",
+      "description": "Overall composite architecture score (0-100)"
+    },
+    "dimensions": {
+      "type": "object",
+      "properties": {
+        "coupling": { "type": "number" },
+        "modularity": { "type": "number" },
+        "cohesion": { "type": "number" },
+        "extensibility": { "type": "number" },
+        "maintainability": { "type": "number" }
+      }
+    },
+    "element_count": {
+      "type": "integer",
+      "description": "Number of elements in the model"
+    },
+    "relationship_count": {
+      "type": "integer",
+      "description": "Number of relationships in the model"
+    },
+    "commit": {
+      "type": "string",
+      "description": "Git commit SHA"
+    },
+    "treemap": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "level": { "type": "string" },
+          "score": { "type": "number" },
+          "size": { "type": "integer" },
+          "parent_id": { "type": "string" },
+          "stereotype": { "type": "string" }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "description": "List of components with architecture scores",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "composite": { "type": "number", "description": "Composite score (0-100)" },
+          "coupling": { "type": "number", "description": "Coupling score (0-100)" },
+          "instability_index": { "type": "number", "description": "Instability index (0-1)" },
+          "efferent_coupling": { "type": "integer", "description": "Number of outgoing dependencies" },
+          "afferent_coupling": { "type": "integer", "description": "Number of incoming dependencies" }
+        }
+      }
+    }
+  }
+}

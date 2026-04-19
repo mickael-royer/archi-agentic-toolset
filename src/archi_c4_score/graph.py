@@ -84,7 +84,7 @@ class GraphQueries:
     @staticmethod
     def create_node(label: str, properties: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         """Generate node creation query."""
-        props = ", ".join(f"n.{k} = ${k}" for k in properties.keys())
+        props = ", ".join(f"{k}: ${k}" for k in properties.keys())
         query = f"""
         CREATE (n:{label} {{{props}}})
         RETURN n
@@ -104,7 +104,7 @@ class GraphQueries:
             "target_id": target_id,
             **properties,
         }
-        props = ", ".join(f"r.{k} = ${k}" for k in properties.keys())
+        props = ", ".join(f"{k}: ${k}" for k in properties.keys())
         query = f"""
         MATCH (a), (b)
         WHERE a.id = $source_id AND b.id = $target_id

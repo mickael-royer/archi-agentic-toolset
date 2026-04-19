@@ -1,22 +1,363 @@
 {
   "$schema": "https://architoolset.dev/schemas/timeline-v1.json",
-  "generated": "2026-04-18T09:17:46.926888Z",
+  "generated": "2026-04-18T18:32:55.598276Z",
   "repository": {
-    "url": "https://github.com/test/repo",
-    "name": "repo"
+    "url": "https://github.com/mickael-royer/archimate-ear",
+    "name": "archimate-ear"
   },
   "summary": {
     "health_status": "STABLE",
-    "commits_analyzed": 0,
-    "date_range": {}
+    "commits_analyzed": 30,
+    "date_range": {
+      "start": "2026-03-19T20:32:55.466533",
+      "end": "2026-04-17T20:32:55.466533"
+    }
   },
-  "commits": [],
-  "trends": [],
+  "commits": [
+    {
+      "sha": "abc000",
+      "date": "2026-03-19T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 70.0,
+      "dimensions": {},
+      "element_count": 10,
+      "relationship_count": 15
+    },
+    {
+      "sha": "abc001",
+      "date": "2026-03-20T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 70.5,
+      "dimensions": {},
+      "element_count": 11,
+      "relationship_count": 17
+    },
+    {
+      "sha": "abc002",
+      "date": "2026-03-21T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 71.0,
+      "dimensions": {},
+      "element_count": 12,
+      "relationship_count": 19
+    },
+    {
+      "sha": "abc003",
+      "date": "2026-03-22T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 71.5,
+      "dimensions": {},
+      "element_count": 13,
+      "relationship_count": 21
+    },
+    {
+      "sha": "abc004",
+      "date": "2026-03-23T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 72.0,
+      "dimensions": {},
+      "element_count": 14,
+      "relationship_count": 23
+    },
+    {
+      "sha": "abc005",
+      "date": "2026-03-24T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 72.5,
+      "dimensions": {},
+      "element_count": 15,
+      "relationship_count": 25
+    },
+    {
+      "sha": "abc006",
+      "date": "2026-03-25T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 73.0,
+      "dimensions": {},
+      "element_count": 16,
+      "relationship_count": 27
+    },
+    {
+      "sha": "abc007",
+      "date": "2026-03-26T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 73.5,
+      "dimensions": {},
+      "element_count": 17,
+      "relationship_count": 29
+    },
+    {
+      "sha": "abc008",
+      "date": "2026-03-27T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 74.0,
+      "dimensions": {},
+      "element_count": 18,
+      "relationship_count": 31
+    },
+    {
+      "sha": "abc009",
+      "date": "2026-03-28T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 74.5,
+      "dimensions": {},
+      "element_count": 19,
+      "relationship_count": 33
+    },
+    {
+      "sha": "abc010",
+      "date": "2026-03-29T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 75.0,
+      "dimensions": {},
+      "element_count": 20,
+      "relationship_count": 35
+    },
+    {
+      "sha": "abc011",
+      "date": "2026-03-30T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 75.5,
+      "dimensions": {},
+      "element_count": 21,
+      "relationship_count": 37
+    },
+    {
+      "sha": "abc012",
+      "date": "2026-03-31T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 76.0,
+      "dimensions": {},
+      "element_count": 22,
+      "relationship_count": 39
+    },
+    {
+      "sha": "abc013",
+      "date": "2026-04-01T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 76.5,
+      "dimensions": {},
+      "element_count": 23,
+      "relationship_count": 41
+    },
+    {
+      "sha": "abc014",
+      "date": "2026-04-02T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 77.0,
+      "dimensions": {},
+      "element_count": 24,
+      "relationship_count": 43
+    },
+    {
+      "sha": "abc015",
+      "date": "2026-04-03T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 77.5,
+      "dimensions": {},
+      "element_count": 25,
+      "relationship_count": 45
+    },
+    {
+      "sha": "abc016",
+      "date": "2026-04-04T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 78.0,
+      "dimensions": {},
+      "element_count": 26,
+      "relationship_count": 47
+    },
+    {
+      "sha": "abc017",
+      "date": "2026-04-05T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 78.5,
+      "dimensions": {},
+      "element_count": 27,
+      "relationship_count": 49
+    },
+    {
+      "sha": "abc018",
+      "date": "2026-04-06T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 79.0,
+      "dimensions": {},
+      "element_count": 28,
+      "relationship_count": 51
+    },
+    {
+      "sha": "abc019",
+      "date": "2026-04-07T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 79.5,
+      "dimensions": {},
+      "element_count": 29,
+      "relationship_count": 53
+    },
+    {
+      "sha": "abc020",
+      "date": "2026-04-08T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 80.0,
+      "dimensions": {},
+      "element_count": 30,
+      "relationship_count": 55
+    },
+    {
+      "sha": "abc021",
+      "date": "2026-04-09T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 80.5,
+      "dimensions": {},
+      "element_count": 31,
+      "relationship_count": 57
+    },
+    {
+      "sha": "abc022",
+      "date": "2026-04-10T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 81.0,
+      "dimensions": {},
+      "element_count": 32,
+      "relationship_count": 59
+    },
+    {
+      "sha": "abc023",
+      "date": "2026-04-11T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 81.5,
+      "dimensions": {},
+      "element_count": 33,
+      "relationship_count": 61
+    },
+    {
+      "sha": "abc024",
+      "date": "2026-04-12T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 82.0,
+      "dimensions": {},
+      "element_count": 34,
+      "relationship_count": 63
+    },
+    {
+      "sha": "abc025",
+      "date": "2026-04-13T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 82.5,
+      "dimensions": {},
+      "element_count": 35,
+      "relationship_count": 65
+    },
+    {
+      "sha": "abc026",
+      "date": "2026-04-14T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 83.0,
+      "dimensions": {},
+      "element_count": 36,
+      "relationship_count": 67
+    },
+    {
+      "sha": "abc027",
+      "date": "2026-04-15T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 83.5,
+      "dimensions": {},
+      "element_count": 37,
+      "relationship_count": 69
+    },
+    {
+      "sha": "abc028",
+      "date": "2026-04-16T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 84.0,
+      "dimensions": {},
+      "element_count": 38,
+      "relationship_count": 71
+    },
+    {
+      "sha": "abc029",
+      "date": "2026-04-17T20:32:55.466533",
+      "author": "Test Author",
+      "composite_score": 84.5,
+      "dimensions": {},
+      "element_count": 39,
+      "relationship_count": 73
+    }
+  ],
+  "trends": [
+    {
+      "dimension": "coupling",
+      "direction": "STABLE",
+      "slope": 0.0,
+      "confidence": 0.0
+    },
+    {
+      "dimension": "modularity",
+      "direction": "STABLE",
+      "slope": 0.0,
+      "confidence": 0.0
+    },
+    {
+      "dimension": "cohesion",
+      "direction": "STABLE",
+      "slope": 0.0,
+      "confidence": 0.0
+    },
+    {
+      "dimension": "extensibility",
+      "direction": "STABLE",
+      "slope": 0.0,
+      "confidence": 0.0
+    },
+    {
+      "dimension": "maintainability",
+      "direction": "STABLE",
+      "slope": 0.0,
+      "confidence": 0.0
+    }
+  ],
   "concerns": [],
   "recommendations": {
     "recommendations": [],
-    "llm_available": false,
-    "generated_at": "2026-04-18T09:17:46.926876+00:00",
-    "error_message": "No commits available"
+    "llm_available": false
+  },
+  "c4_scoring": {
+    "composite_score": 84.5,
+    "dimensions": {},
+    "element_count": 39,
+    "relationship_count": 73,
+    "commit": "abc029",
+    "treemap": [
+      {
+        "id": "system",
+        "name": "System",
+        "level": "SYSTEM",
+        "score": 100.0,
+        "size": 1,
+        "parent_id": null,
+        "stereotype": ""
+      },
+      {
+        "id": "container-sample",
+        "name": "Sample Container",
+        "level": "CONTAINER",
+        "score": 75.0,
+        "size": 5,
+        "parent_id": "system",
+        "stereotype": ""
+      }
+    ],
+    "components": [
+      {
+        "id": "component-sample",
+        "name": "Sample Component",
+        "composite": 70.0,
+        "coupling": 75.0,
+        "instability_index": 0.6,
+        "efferent_coupling": 3,
+        "afferent_coupling": 2
+      }
+    ]
   }
 }

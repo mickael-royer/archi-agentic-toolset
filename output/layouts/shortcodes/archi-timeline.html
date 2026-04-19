@@ -1,6 +1,34 @@
 {{ $data := index .Site.Data "timeline" }}
 {{ if $data }}
 <div class="archi-timeline">
+  {{ if and $data.c4_scoring $data.c4_scoring.components }}
+  <div class="components-table-section">
+    <h3>Component Scores</h3>
+    <table class="components-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Composite</th>
+          <th>Coupling</th>
+          <th>Instability</th>
+          <th>Dependencies</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range $data.c4_scoring.components }}
+        <tr>
+          <td>{{ .name }}</td>
+          <td>{{ .composite | printf "%.1f" }}</td>
+          <td>{{ .coupling | printf "%.1f" }}</td>
+          <td>{{ .instability_index | printf "%.2f" }}</td>
+          <td>In: {{ .afferent_coupling }}, Out: {{ .efferent_coupling }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ end }}
+  
   <canvas id="timelineChart"></canvas>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>

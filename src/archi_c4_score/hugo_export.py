@@ -28,6 +28,7 @@ class HugoTimelineData:
     trends: list[dict[str, Any]]
     concerns: list[dict[str, Any]]
     recommendations: dict[str, Any]
+    c4_scoring: dict[str, Any] | None = None
     schema_url: str = "https://architoolset.dev/schemas/timeline-v1.json"
 
 
@@ -37,6 +38,34 @@ class DashboardGenerator:
     HUGO_SHORTCODE = """{{ $data := index .Site.Data "timeline" }}
 {{ if $data }}
 <div class="archi-timeline">
+  {{ if and $data.c4_scoring $data.c4_scoring.components }}
+  <div class="components-table-section">
+    <h3>Component Scores</h3>
+    <table class="components-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Composite</th>
+          <th>Coupling</th>
+          <th>Instability</th>
+          <th>Dependencies</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range $data.c4_scoring.components }}
+        <tr>
+          <td>{{ .name }}</td>
+          <td>{{ .composite | printf "%.1f" }}</td>
+          <td>{{ .coupling | printf "%.1f" }}</td>
+          <td>{{ .instability_index | printf "%.2f" }}</td>
+          <td>In: {{ .afferent_coupling }}, Out: {{ .efferent_coupling }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ end }}
+  
   <canvas id="timelineChart"></canvas>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
@@ -103,6 +132,7 @@ class DashboardGenerator:
         health_status: str,
         significant_changes: list[dict[str, Any]],
         recommendations: dict[str, Any] | None = None,
+        c4_scoring: dict[str, Any] | None = None,
     ) -> HugoTimelineData:
         """Generate complete Hugo dashboard data."""
         repo_name = repository_url.rstrip("/").split("/")[-1]
@@ -136,6 +166,7 @@ class DashboardGenerator:
                 "recommendations": [],
                 "llm_available": False,
             },
+            c4_scoring=c4_scoring,
         )
 
         self._write_json(data)
@@ -187,6 +218,9 @@ class DashboardGenerator:
             "concerns": data.concerns,
             "recommendations": data.recommendations,
         }
+
+        if data.c4_scoring:
+            output["c4_scoring"] = data.c4_scoring
 
         (self.data_dir / "timeline.json").write_text(json.dumps(output, indent=2, default=str))
 

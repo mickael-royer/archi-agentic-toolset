@@ -27,6 +27,11 @@ class C4Mapper:
         "<<System>>": C4Level.SYSTEM,
         "<<Container>>": C4Level.CONTAINER,
         "<<Component>>": C4Level.COMPONENT,
+        # Also support plain names (from Archi import)
+        "Software System": C4Level.SYSTEM,
+        "Container": C4Level.CONTAINER,
+        "Component": C4Level.COMPONENT,
+        "System Software": C4Level.SYSTEM,
     }
 
     DEPENDENCY_WEIGHTS = {

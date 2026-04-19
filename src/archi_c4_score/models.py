@@ -75,6 +75,7 @@ class C4Relationship:
     source_id: str
     target_id: str
     relationship_type: str
+    rel_type: str = ""
     weight: float = 1.0
     is_circular: bool = False
 
@@ -114,6 +115,7 @@ class ComponentScore:
     instability_index: float
     efferent_coupling: int
     afferent_coupling: int
+    parent: str = ""
 
 
 @dataclass

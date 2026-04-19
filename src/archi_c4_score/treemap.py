@@ -27,23 +27,35 @@ def generate_treemap(
     cells: list[TreemapCell] = []
 
     if system_id:
+        # Calculate system score from container scores
+        system_score = 100.0
+        if containers:
+            system_score = sum(c.composite for c in containers) / len(containers)
+
         cells.append(
             TreemapCell(
                 id=system_id,
                 name="System",
                 level="SYSTEM",
-                score=100.0,
+                score=system_score,
                 size=len(containers),
             )
         )
 
+    # Add containers with their scores (skip duplicate components)
+    seen: set[str] = set()
     for container in containers:
+        if container.node_id in seen:
+            continue
+        seen.add(container.node_id)
+
+        # Use coupling score (higher coupling = more red/worse)
         cells.append(
             TreemapCell(
                 id=container.node_id,
                 name=container.node_name,
                 level="CONTAINER",
-                score=container.composite,
+                score=container.coupling,  # Use coupling instead of composite
                 size=container.component_count,
                 parent_id=system_id,
                 stereotype=getattr(container, "stereotype", ""),

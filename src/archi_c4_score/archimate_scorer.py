@@ -105,27 +105,46 @@ class ArchimateScorer:
         """Calculate coupling score (0-100, higher is better).
 
         Coupling measures dependencies between containers/components.
-        Fewer dependencies = lower coupling = higher score.
+        Only Flow (sync) and Triggering (async) relationships count.
+        Flow = 1.5x weight, Triggering = 1.0x weight.
         """
-        if not relationships:
-            return 100.0
+        # Filter to only Flow and Triggering relationships
+        relevant_rels = [
+            r
+            for r in relationships
+            if getattr(r, "relationship_type", "") in ["Flow", "Triggering"]
+            or getattr(r, "rel_type", "") in ["Flow", "Triggering"]
+        ]
+
+        if not relevant_rels:
+            return 70.0  # No flow/triggering = default medium coupling
 
         all_nodes = {e.id for e in containers + components}
         if len(all_nodes) <= 1:
-            return 100.0
+            return 70.0
 
-        deps = self._build_dependency_graph(relationships, all_nodes)
-        cyclic = self._find_cycles(deps)
+        # Calculate weighted dependencies
+        flow_count = sum(
+            1
+            for r in relevant_rels
+            if getattr(r, "relationship_type", "") == "Flow" or getattr(r, "rel_type", "") == "Flow"
+        )
+        trigger_count = len(relevant_rels) - flow_count
+        weighted_deps = (flow_count * 1.5) + (trigger_count * 1.0)
 
-        efferent = sum(len(deps.get(n, set())) for n in all_nodes)
-        afferent = sum(sum(1 for m in all_nodes if n in deps.get(m, set())) for n in all_nodes)
+        # Map to 30-70 scale
+        if weighted_deps <= 1:
+            coupling = 30.0
+        elif weighted_deps <= 3:
+            coupling = 40.0
+        elif weighted_deps <= 6:
+            coupling = 50.0
+        elif weighted_deps <= 10:
+            coupling = 60.0
+        else:
+            coupling = 70.0
 
-        instability = efferent / (efferent + afferent) if (efferent + afferent) > 0 else 0
-
-        cycle_penalty = len(cyclic) * 5
-
-        score = 100.0 - (instability * 60) - cycle_penalty
-        return max(0.0, min(100.0, score))
+        return coupling
 
     def _calculate_modularity(
         self,

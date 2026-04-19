@@ -128,15 +128,37 @@ class TimelineService:
         offset: int = 0,
     ) -> Timeline:
         """Generate timeline from scored commits."""
+        from datetime import datetime, timezone
+
+        def to_aware(dt):
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt
+
+        def get_sort_key(c):
+            d = c.get("commit_date")
+            if isinstance(d, datetime):
+                return to_aware(d)
+            if isinstance(d, str):
+                try:
+                    return datetime.fromisoformat(d.replace("Z", "+00:00"))
+                except Exception:
+                    return datetime.min.replace(tzinfo=timezone.utc)
+            return datetime.min.replace(tzinfo=timezone.utc)
+
         logger.info(f"Generating timeline for {repository_url}: {len(scored_commits)} commits")
-        sorted_commits = sorted(scored_commits, key=lambda c: c["commit_date"])
+
+        valid_commits = [c for c in scored_commits if c.get("composite_score") is not None]
+        sorted_commits = sorted(valid_commits, key=get_sort_key)
 
         timeline_points: list[TimelinePoint] = []
         previous_score: float | None = None
         gaps: list[str] = []
 
         for i, commit in enumerate(sorted_commits):
-            composite = commit.get("composite_score", 0.0)
+            composite = commit.get("composite_score")
+            if composite is None:
+                continue
             delta, is_significant = self.calculate_score_delta(composite, previous_score)
 
             point = TimelinePoint(
@@ -193,8 +215,13 @@ class TimelineService:
         dimensions = ["coupling", "modularity", "cohesion", "extensibility", "maintainability"]
         trends: list[TrendLine] = []
 
+        valid_points = [p for p in timeline_points if p.dimensions]
+
         for dimension in dimensions:
-            scores = [p.dimensions.get(dimension, 0) for p in timeline_points]
+            scores = [p.dimensions.get(dimension) for p in valid_points]
+            scores = [s for s in scores if s is not None]
+            if not scores:
+                continue
             slope, confidence = self._linear_regression(range(len(scores)), scores)
             direction = self._classify_trend(slope)
             trends.append(

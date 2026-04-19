@@ -1,5 +1,6 @@
 """CLI interface for C4 Architecture Scoring."""
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -8,7 +9,6 @@ import click
 
 from archi_c4_score import __version__
 from archi_c4_score.hugo_export import DashboardGenerator
-from archi_c4_score.mapper import C4Mapper
 from archi_c4_score.parser import CoArchi2Parser
 from archi_c4_score.repository import Repository
 from archi_c4_score.timeline import TimelineService
@@ -41,7 +41,7 @@ def import_model(
     neo4j_password: str,
     output: str | None,
 ) -> None:
-    """Import a C4 model from a coArchi2 repository."""
+    """Import a C4 model from a coArchi2 or Archi repository."""
     try:
         repo_path = Path("/tmp/archi-model")
         repo = Repository(path=repo_path)
@@ -49,18 +49,93 @@ def import_model(
             repo.clone(repo_url)
         commit = repo.get_current_commit()
 
-        parser = CoArchi2Parser()
-        model_files = repo.find_model_files()
-        if model_files:
-            import json as json_module
+        # Check for .archimate files first (Archi format), then .json (coArchi2)
+        archimate_files = list(repo_path.glob("**/*.archimate"))
+        json_files = list(repo_path.glob("**/*.json"))
 
-            data = json_module.loads(model_files[0].read_text())
+        nodes = []
+        rels = []
+
+        if archimate_files:
+            from archi_c4_score.github_importer import parse_model_archimate
+            from archi_c4_score.mapper import C4Mapper
+
+            xml_content = archimate_files[0].read_text()
+            elements = []
+            relationships = []
+            for item, item_type in parse_model_archimate(xml_content):
+                if item_type == "element":
+                    elements.append(item)
+                elif item_type == "relationship":
+                    relationships.append(item)
+            mapper = C4Mapper()
+            nodes, rels = mapper.map_model(elements, relationships)
+            logger.info(f"Parsed {len(nodes)} nodes, {len(rels)} rels from .archimate")
+
+        elif json_files:
+            parser = CoArchi2Parser()
+            data = json.loads(json_files[0].read_text())
             archi_model = parser.parse(data)
             mapper = C4Mapper()
             nodes, rels = mapper.map_model(archi_model.elements, archi_model.relationships)
-            result = {"commit": commit, "nodes": len(nodes), "rels": len(rels)}
         else:
-            result = {"commit": commit, "nodes": 0, "rels": 0}
+            logger.warning(f"No model files found in {repo_path}")
+
+        # Import to Neo4j if credentials provided
+        if neo4j_uri and neo4j_user and neo4j_password:
+            from archi_c4_score.graph import Neo4jConnection
+            from archi_c4_score.importing import Neo4jImporter
+
+            async def do_import():
+                conn = Neo4jConnection(neo4j_uri, neo4j_user, neo4j_password)
+                await conn.connect()
+                importer = Neo4jImporter(conn)
+
+                # Convert nodes to C4Node objects if they aren't already
+                from archi_c4_score.models import (
+                    C4Node as ModelC4Node,
+                    C4Relationship as ModelC4Rel,
+                    C4Level,
+                )
+
+                c4_nodes = []
+                for n in nodes:
+                    if hasattr(n, "id"):
+                        # Map level string to C4Level enum
+                        level_str = str(getattr(n, "level", "COMPONENT"))
+                        try:
+                            c4_level = C4Level[level_str.upper()]
+                        except (KeyError, AttributeError):
+                            c4_level = C4Level.COMPONENT
+
+                        c4_nodes.append(
+                            ModelC4Node(
+                                id=n.id,
+                                name=n.name,
+                                c4_level=c4_level,
+                            )
+                        )
+
+                c4_rels = []
+                for r in rels:
+                    if hasattr(r, "source_id"):
+                        c4_rels.append(
+                            ModelC4Rel(
+                                source_id=r.source_id,
+                                target_id=r.target_id,
+                                relationship_type=r.relationship_type,
+                                rel_type=getattr(r, "rel_type", ""),
+                            )
+                        )
+
+                result = await importer.import_model(c4_nodes, c4_rels, commit)
+                await conn.close()
+                return result
+
+            import_result = asyncio.run(do_import())
+            logger.info(f"Imported to Neo4j: {import_result}")
+
+        result = {"commit": commit, "nodes": len(nodes), "rels": len(rels)}
 
         output_json = ctx.obj.get("output_json")
         if output_json or output:
@@ -314,16 +389,66 @@ def dashboard(
     """Generate dashboard report."""
     try:
         from archi_c4_score.dashboard_service import get_recommendations_for_dashboard
+        from archi_c4_score.scoring import BackfillOrchestrator, ScoringEngine
+        from archi_c4_score.treemap import generate_treemap
 
         service = TimelineService()
         scored_commits = _get_mock_scored_commits()
         timeline_data = service.get_timeline(repo_url, scored_commits)
         trends = service.calculate_trends(timeline_data.commits)
 
-        generator = DashboardGenerator()
+        generator = DashboardGenerator(output_dir=output if output else "output")
         health_status = generator.calculate_health_status(
             [{"direction": t.direction.value} for t in trends]
         )
+
+        c4_scoring_data = None
+        treemap_cells = []
+        if timeline_data.commits:
+            commit_sha = timeline_data.commits[-1].sha
+            orchestrator = BackfillOrchestrator(scoring_engine=ScoringEngine(), repository=None)
+            import asyncio
+
+            containers = asyncio.run(orchestrator.get_container_scores(repo_url, commit_sha))
+            components = asyncio.run(orchestrator.get_component_scores(repo_url, commit_sha))
+            treemap = generate_treemap(containers, system_id="system")
+            treemap_cells = [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "level": c.level,
+                    "score": c.score,
+                    "size": c.size,
+                    "parent_id": c.parent_id,
+                    "stereotype": c.stereotype,
+                }
+                for c in treemap
+            ]
+
+            component_cells = [
+                {
+                    "id": c.node_id,
+                    "name": c.node_name,
+                    "composite": c.composite,
+                    "coupling": c.coupling,
+                    "instability_index": c.instability_index,
+                    "efferent_coupling": c.efferent_coupling,
+                    "afferent_coupling": c.afferent_coupling,
+                }
+                for c in components
+            ]
+
+            if timeline_data.commits:
+                latest_commit = timeline_data.commits[-1]
+                c4_scoring_data = {
+                    "composite_score": latest_commit.composite_score,
+                    "dimensions": latest_commit.dimensions,
+                    "element_count": latest_commit.element_count,
+                    "relationship_count": latest_commit.relationship_count,
+                    "commit": commit_sha,
+                    "treemap": treemap_cells,
+                    "components": component_cells,
+                }
 
         recommendations_data = None
         if include_recommendations:
@@ -369,6 +494,7 @@ def dashboard(
                 for s in timeline_data.significant_changes
             ],
             recommendations=recommendations_data,
+            c4_scoring=c4_scoring_data,
         )
 
         output_json = ctx.obj.get("output_json")
