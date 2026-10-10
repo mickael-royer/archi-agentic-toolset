@@ -1,0 +1,44 @@
+{
+  "tagGroups": [
+    {"id": "g-risk", "name": "Risk"},
+    {"id": "g-int", "name": "Interaction"}
+  ],
+  "tags": [
+    {"id": "t-high", "name": "High", "groupId": "g-risk"},
+    {"id": "t-sync", "name": "Sync", "groupId": "g-int"},
+    {"id": "t-async", "name": "Async", "groupId": "g-int"}
+  ],
+  "modelObjects": [
+    {"id": "root", "name": "Root", "type": "root", "status": "live"},
+    {"id": "sys", "name": "Unicorn", "type": "system", "parentId": "root", "external": false, "status": "live"},
+    {"id": "gdrive", "name": "Google Drive", "type": "system", "parentId": "root", "external": true, "status": "live"},
+    {"id": "user", "name": "Architect", "type": "actor", "parentId": "root", "external": false, "status": "live"},
+    {"id": "frontend", "name": "Frontend", "type": "app", "parentId": "sys", "external": false, "status": "live"},
+    {"id": "backend", "name": "Backend", "type": "app", "parentId": "sys", "external": false, "status": "live"},
+    {"id": "process", "name": "File Process", "type": "app", "parentId": "sys", "external": false, "status": "live"},
+    {"id": "publish", "name": "File Publish", "type": "app", "parentId": "sys", "external": false, "status": "live"},
+    {"id": "state", "name": "Statestore", "type": "store", "parentId": "sys", "external": false, "status": "live"},
+    {"id": "old", "name": "Old App", "type": "app", "parentId": "sys", "external": false, "status": "removed"},
+    {"id": "c-drive", "name": "Drive Component", "type": "component", "parentId": "frontend", "status": "live"},
+    {"id": "c-list", "name": "List Files", "type": "component", "parentId": "backend", "status": "live"},
+    {"id": "c-auth", "name": "Auth", "type": "component", "parentId": "backend", "status": "live"},
+    {"id": "c-process", "name": "Process", "type": "component", "parentId": "process", "status": "live"},
+    {"id": "c-publish", "name": "Publish", "type": "component", "parentId": "publish", "status": "live"}
+  ],
+  "modelConnections": [
+    {"id": "k1", "name": "fetch (List Drive)", "originId": "c-drive", "targetId": "backend", "direction": "outgoing", "status": "live", "tagIds": []},
+    {"id": "k2", "name": "list", "originId": "c-list", "targetId": "gdrive", "direction": "outgoing", "status": "live", "tagIds": ["t-sync"]},
+    {"id": "k3", "name": "file uploaded", "originId": "c-list", "targetId": "c-process", "direction": "outgoing", "status": "live", "tagIds": ["t-async", "t-high"]},
+    {"id": "k4", "name": "file processed", "originId": "c-process", "targetId": "c-publish", "direction": "outgoing", "status": "live", "tagIds": ["t-async"]},
+    {"id": "k5", "name": "save state", "originId": "c-publish", "targetId": "state", "direction": "bidirectional", "status": "live", "tagIds": []},
+    {"id": "k6", "name": "uses", "originId": "user", "targetId": "frontend", "direction": "outgoing", "status": "live", "tagIds": []},
+    {"id": "k7", "name": "callback", "originId": "c-process", "targetId": "c-list", "direction": "outgoing", "status": "future", "tagIds": []},
+    {"id": "k8", "name": "check token", "originId": "c-list", "targetId": "c-auth", "direction": "outgoing", "status": "live", "tagIds": []},
+    {"id": "k9", "name": "legacy", "originId": "old", "targetId": "backend", "direction": "outgoing", "status": "live", "tagIds": []},
+    {"id": "k10", "name": "gone", "originId": "frontend", "targetId": "publish", "direction": "outgoing", "status": "removed", "tagIds": []}
+  ],
+  "versions": [
+    {"id": "v2", "name": "2026-10-10", "createdAt": "2026-10-10T08:00:00Z"},
+    {"id": "v1", "name": "Archi import", "createdAt": "2026-10-04T08:00:00Z"}
+  ]
+}

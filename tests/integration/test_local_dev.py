@@ -37,12 +37,12 @@ class TestLocalDevelopment:
 class TestScoringEndpoints:
     """Tests for scoring API endpoints."""
 
-    def test_score_endpoint_exists(self):
+    def test_score_endpoint_exists(self, icepanel_fixture_source):
         """Score endpoint is available."""
         from archi_c4_score.api import app
 
         client = TestClient(app)
-        response = client.post("/api/v1/score", json={"commit": "abc123"})
+        response = client.post("/api/v1/score", json={"version": "latest"})
         assert response.status_code == 200
 
     def test_model_endpoint_exists(self):

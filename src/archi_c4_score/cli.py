@@ -154,37 +154,101 @@ def import_model(
         raise click.ClickException(str(e))
 
 
+SOURCE_OPTION = click.option(
+    "--source",
+    type=click.Choice(["icepanel", "archimate"]),
+    default="icepanel",
+    show_default=True,
+    help="Model source (ADR 0031). archimate is legacy and needs --model-path.",
+)
+FUTURE_OPTION = click.option(
+    "--include-future", is_flag=True, default=False, help="Also score IcePanel 'future' items"
+)
+
+
 @cli.command()
-@click.argument("commit_sha")
-@click.option("--neo4j-uri", default="bolt://localhost:7687", help="Neo4j URI")
-@click.option("--neo4j-user", default="neo4j", help="Neo4j user")
-@click.option("--neo4j-password", prompt=True, hide_input=True, help="Neo4j password")
+@SOURCE_OPTION
+@click.option("--version", "version", default=None, help="IcePanel version id (default: latest)")
+@click.option("--model-path", type=click.Path(exists=True), help="Local .archimate file")
+@FUTURE_OPTION
 @click.pass_context
 def score(
     ctx: click.Context,
-    commit_sha: str,
-    neo4j_uri: str,
-    neo4j_user: str,
-    neo4j_password: str,
+    source: str,
+    version: str | None,
+    model_path: str | None,
+    include_future: bool,
 ) -> None:
-    """Score an architecture at a specific commit."""
+    """Score the architecture from a model source (IcePanel by default)."""
+    from archi_c4_score.scoring_service import build_source, score_to_dict
+
     try:
-        result = {
-            "commit": commit_sha,
-            "composite_score": 85.0,
-            "systems": [],
-            "recommendations": [],
-        }
-
-        output_json = ctx.obj.get("output_json")
-        if output_json:
-            click.echo(json.dumps(result, indent=2))
-        else:
-            click.echo(f"Architecture Score: {result['composite_score']}")
-
+        model_source = build_source(source, include_future, model_path)
+        result = score_to_dict(model_source, source, version or _default_version(source))
     except Exception as e:
         logger.error(f"Scoring failed: {e}")
         raise click.ClickException(str(e))
+
+    if ctx.obj.get("output_json"):
+        click.echo(json.dumps(result, indent=2))
+        return
+    click.echo(f"Architecture Score ({source} {result['commit']}): {result['composite_score']:.1f}")
+    for c in result["container_scores"]:
+        click.echo(
+            f"  {c['node_name']:<24} composite={c['composite']:5.1f} "
+            f"Ca={c['afferent_coupling']} Ce={c['efferent_coupling']} "
+            f"I={c['instability_index']:.2f}"
+        )
+
+
+@cli.command("compare-versions")
+@click.argument("from_version")
+@click.argument("to_version", default="latest")
+@FUTURE_OPTION
+@click.pass_context
+def compare_versions_cmd(
+    ctx: click.Context, from_version: str, to_version: str, include_future: bool
+) -> None:
+    """Per-container score deltas between two IcePanel versions."""
+    from archi_c4_score.scoring_service import build_source, compare_versions
+
+    try:
+        diff = compare_versions(build_source("icepanel", include_future), from_version, to_version)
+    except Exception as e:
+        raise click.ClickException(str(e))
+
+    if ctx.obj.get("output_json"):
+        click.echo(json.dumps(diff, indent=2))
+        return
+    click.echo(
+        f"System {diff['system_before']:.1f} -> {diff['system_after']:.1f} "
+        f"({diff['system_delta']:+.1f})"
+    )
+    for row in diff["containers"]:
+        if row["status"] != "unchanged":
+            click.echo(f"  {row['name']:<24} {row['status']:<8} {row['before']} -> {row['after']}")
+
+
+@cli.command("versions")
+@click.pass_context
+def versions_cmd(ctx: click.Context) -> None:
+    """List IcePanel landscape versions."""
+    from archi_c4_score.scoring_service import build_source
+
+    try:
+        versions = build_source("icepanel").list_versions()
+    except Exception as e:
+        raise click.ClickException(str(e))
+    for v in versions:
+        click.echo(f"{v.id}  {v.created_at}  {v.name}")
+
+
+def _default_version(source: str) -> str:
+    if source == "icepanel":
+        from archi_c4_score.icepanel_source import IcePanelModelSource
+
+        return IcePanelModelSource.default_version()
+    return "latest"
 
 
 @cli.command()
@@ -363,7 +427,14 @@ def compare(ctx: click.Context, repo_url: str, from_commit: str, to_commit: str)
 
 
 @cli.command()
-@click.option("--repo-url", required=True, help="Git repository URL")
+@click.option("--repo-url", help="Git repository URL (legacy archimate source)")
+@click.option(
+    "--source",
+    type=click.Choice(["archimate", "icepanel"]),
+    default="archimate",
+    show_default=True,
+    help="icepanel scores every landscape version plus latest (ADR 0031)",
+)
 @click.option("--output", type=click.Path(), help="Output file or directory")
 @click.option(
     "--format",
@@ -381,7 +452,8 @@ def compare(ctx: click.Context, repo_url: str, from_commit: str, to_commit: str)
 @click.pass_context
 def dashboard(
     ctx: click.Context,
-    repo_url: str,
+    repo_url: str | None,
+    source: str,
     output: str | None,
     output_format: str,
     include_recommendations: bool,
@@ -392,8 +464,15 @@ def dashboard(
         from archi_c4_score.scoring import BackfillOrchestrator, ScoringEngine
         from archi_c4_score.treemap import generate_treemap
 
+        if source == "icepanel":
+            scored_commits, icepanel_scoring = _icepanel_dashboard_inputs()
+            repo_url = repo_url or "https://app.icepanel.io"
+        elif not repo_url:
+            raise click.UsageError("--repo-url is required for the archimate source")
+        else:
+            scored_commits, icepanel_scoring = _get_mock_scored_commits(), None
+
         service = TimelineService()
-        scored_commits = _get_mock_scored_commits()
         timeline_data = service.get_timeline(repo_url, scored_commits)
         trends = service.calculate_trends(timeline_data.commits)
 
@@ -402,9 +481,9 @@ def dashboard(
             [{"direction": t.direction.value} for t in trends]
         )
 
-        c4_scoring_data = None
+        c4_scoring_data = icepanel_scoring
         treemap_cells = []
-        if timeline_data.commits:
+        if timeline_data.commits and icepanel_scoring is None:
             commit_sha = timeline_data.commits[-1].sha
             orchestrator = BackfillOrchestrator(scoring_engine=ScoringEngine(), repository=None)
             import asyncio
@@ -498,7 +577,9 @@ def dashboard(
         )
 
         output_json = ctx.obj.get("output_json")
-        if output or output_json:
+        if output_format == "hugo" and output:
+            click.echo(f"Hugo data written to {generator.data_dir / 'timeline.json'}")
+        elif output or output_json:
             result = {
                 "generated_at": hugo_data.generated,
                 "repository": hugo_data.repository,
@@ -508,6 +589,8 @@ def dashboard(
                 "concerns": hugo_data.concerns,
                 "recommendations": hugo_data.recommendations,
             }
+            if hugo_data.c4_scoring:
+                result["c4_scoring"] = hugo_data.c4_scoring
             if output:
                 Path(output).write_text(json.dumps(result, indent=2, default=str))
                 click.echo(f"Dashboard written to {output}")
@@ -536,6 +619,68 @@ def dashboard(
     except Exception as e:
         logger.error(f"Dashboard failed: {e}")
         raise click.ClickException(str(e))
+
+
+def _icepanel_dashboard_inputs() -> tuple[list[dict], dict]:
+    """Score every IcePanel version plus latest: timeline points and latest c4_scoring block."""
+    from datetime import datetime, timezone
+
+    from archi_c4_score.scoring_service import build_source, score_version
+    from archi_c4_score.treemap import generate_treemap
+
+    model_source = build_source("icepanel")
+    now = datetime.now(timezone.utc).isoformat()
+    points = [(v.id, v.created_at, v.name) for v in model_source.list_versions()]
+    points.append(("latest", now, "latest (draft)"))
+
+    scored: list[dict] = []
+    for version_id, created_at, name in points:
+        report, model = score_version(model_source, version_id)
+        scored.append(
+            {
+                "commit_sha": version_id,
+                "commit_date": created_at or now,
+                "author": "IcePanel",
+                "message": name,
+                "composite_score": report.composite_score,
+                "element_count": len(model.nodes),
+                "relationship_count": len(model.relationships),
+            }
+        )
+
+    treemap = generate_treemap(report.container_scores, system_id=model.system_id or "system")
+    c4_scoring = {
+        "source": "icepanel",
+        "composite_score": report.composite_score,
+        "element_count": len(model.nodes),
+        "relationship_count": len(model.relationships),
+        "commit": report.git_commit,
+        "treemap": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "level": c.level,
+                "score": c.score,
+                "size": c.size,
+                "parent_id": c.parent_id,
+                "stereotype": c.stereotype,
+            }
+            for c in treemap
+        ],
+        "components": [
+            {
+                "id": c.node_id,
+                "name": c.node_name,
+                "composite": c.composite,
+                "coupling": c.coupling,
+                "instability_index": c.instability_index,
+                "efferent_coupling": c.efferent_coupling,
+                "afferent_coupling": c.afferent_coupling,
+            }
+            for c in report.component_scores
+        ],
+    }
+    return scored, c4_scoring
 
 
 def _get_mock_scored_commits() -> list[dict]:

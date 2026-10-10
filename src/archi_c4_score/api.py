@@ -2,9 +2,9 @@
 
 import logging
 import os
-from datetime import datetime, timezone
+from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -56,9 +56,13 @@ class ImportResponse(BaseModel):
 
 
 class ScoreRequest(BaseModel):
-    """Request body for score endpoint."""
+    """Request body for score endpoint (specs/006-icepanel-model-source/contracts/score-api.md)."""
 
-    commit: str = Field(..., description="Git commit SHA")
+    source: Literal["icepanel", "archimate"] = Field(default="icepanel", description="Model source")
+    version: str | None = Field(default=None, description="IcePanel version id (default: latest)")
+    commit: str | None = Field(default=None, description="Deprecated alias of version")
+    model_path: str | None = Field(default=None, description="Local .archimate file (archimate)")
+    include_future: bool = Field(default=False, description="Score IcePanel 'future' items too")
     include_recommendations: bool = Field(
         default=True, description="Include recommendations in response"
     )
@@ -68,6 +72,7 @@ class ScoreResponse(BaseModel):
     """Response for score endpoint."""
 
     commit: str
+    source: str = "icepanel"
     composite_score: float
     system_scores: list[dict]
     container_scores: list[dict]
@@ -224,53 +229,34 @@ async def import_model(request: ImportRequest) -> ImportResponse:
 
 @app.post("/api/v1/score", response_model=ScoreResponse)
 async def score_model(request: ScoreRequest) -> ScoreResponse:
-    """Score an architecture at a specific commit."""
+    """Score the architecture from a model source (IcePanel by default, ADR 0031)."""
+    from urllib.error import URLError
 
+    from archi_c4_score.scoring_service import build_source, score_to_dict
+
+    version = request.version or request.commit or "latest"
+    # Named versions are immutable and can be cached; "latest" is a live draft.
+    cacheable = version != "latest" and not request.include_future
     state_client = DaprStateClient()
-    state_key = get_state_key(request.commit)
+    state_key = get_state_key(f"{request.source}:{version}")
+    if cacheable:
+        cached = state_client.get_state(state_key)
+        if cached:
+            return ScoreResponse(**cached)
 
-    cached = state_client.get_state(state_key)
-    if cached:
-        return ScoreResponse(**cached)
+    try:
+        model_source = build_source(request.source, request.include_future, request.model_path)
+        result = score_to_dict(model_source, request.source, version)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (URLError, OSError) as e:
+        raise HTTPException(status_code=502, detail=f"model source unreachable: {e}")
 
-    recommendations: list[dict[str, str]] = []
-    if request.include_recommendations:
-        recommendations = [
-            {
-                "id": "REC-001",
-                "priority": "HIGH",
-                "dimension": "Coupling",
-                "target_node_id": "example",
-                "description": "Reduce efferent dependencies",
-                "rationale": "High instability detected",
-            }
-        ]
-
-    scored_at = datetime.now(timezone.utc).isoformat()
-
-    state_client.set_state(
-        state_key,
-        {
-            "commit": request.commit,
-            "composite_score": 85.0,
-            "system_scores": [],
-            "container_scores": [],
-            "component_scores": [],
-            "recommendations": recommendations,
-            "scored_at": scored_at,
-        },
-        ttl_seconds=3600,
-    )
-
-    return ScoreResponse(
-        commit=request.commit,
-        composite_score=85.0,
-        system_scores=[],
-        container_scores=[],
-        component_scores=[],
-        recommendations=recommendations,
-        scored_at=scored_at,
-    )
+    if not request.include_recommendations:
+        result["recommendations"] = []
+    if cacheable:
+        state_client.set_state(state_key, result, ttl_seconds=3600)
+    return ScoreResponse(**result)
 
 
 @app.get("/api/v1/model/{commit}", response_model=ModelResponse)

@@ -21,44 +21,44 @@ class TestAPIImport:
 
 
 class TestAPIScore:
-    """Tests for POST /api/v1/score endpoint."""
+    """Tests for POST /api/v1/score (specs/006-icepanel-model-source/contracts/score-api.md)."""
 
-    def test_score_endpoint_exists(self):
-        """Score endpoint is available."""
-        client = TestClient(app)
-        response = client.post("/api/v1/score", json={"commit": "abc123"})
-        assert response.status_code in [200, 400, 404]
-
-    def test_score_requires_commit(self):
-        """Score requires commit in body."""
-        client = TestClient(app)
-        response = client.post("/api/v1/score", json={})
-        assert response.status_code == 422
-
-    def test_score_returns_composite_score(self):
-        """Score endpoint returns composite_score field."""
-        client = TestClient(app)
-        response = client.post("/api/v1/score", json={"commit": "abc123"})
+    def test_score_defaults_to_icepanel_latest(self, icepanel_fixture_source):
+        response = TestClient(app).post("/api/v1/score", json={})
         assert response.status_code == 200
         data = response.json()
-        assert "composite_score" in data
+        assert data["source"] == "icepanel"
+        assert data["commit"] == "latest"
+        assert data["composite_score"] == 50.4
+        assert data["system_scores"][0]["node_name"] == "Unicorn"
 
-    def test_score_returns_recommendations(self):
-        """Score endpoint returns recommendations array."""
-        client = TestClient(app)
-        response = client.post("/api/v1/score", json={"commit": "abc123"})
-        assert response.status_code == 200
-        data = response.json()
-        assert "recommendations" in data
+    def test_score_container_fields(self, icepanel_fixture_source):
+        data = TestClient(app).post("/api/v1/score", json={"version": "v2"}).json()
+        backend = next(c for c in data["container_scores"] if c["node_name"] == "Backend")
+        assert {"afferent_coupling", "efferent_coupling", "instability_index"} <= set(backend)
+        assert data["commit"] == "v2"
+
+    def test_commit_is_alias_of_version(self, icepanel_fixture_source):
+        data = TestClient(app).post("/api/v1/score", json={"commit": "abc123"}).json()
+        assert data["commit"] == "abc123"
+
+    def test_score_returns_recommendations(self, icepanel_fixture_source):
+        data = TestClient(app).post("/api/v1/score", json={}).json()
         assert isinstance(data["recommendations"], list)
 
-    def test_score_supports_include_recommendations(self):
-        """Score endpoint respects include_recommendations parameter."""
-        client = TestClient(app)
-        response = client.post(
-            "/api/v1/score", json={"commit": "abc123", "include_recommendations": False}
-        )
-        assert response.status_code == 200
+    def test_unknown_source_is_rejected(self):
+        response = TestClient(app).post("/api/v1/score", json={"source": "visio"})
+        assert response.status_code == 422
+
+    def test_unconfigured_source_is_400(self, monkeypatch):
+        monkeypatch.delenv("ICEPANEL_API_KEY", raising=False)
+        monkeypatch.delenv("ICEPANEL_LANDSCAPE_ID", raising=False)
+        response = TestClient(app).post("/api/v1/score", json={"source": "icepanel"})
+        assert response.status_code == 400
+
+    def test_archimate_needs_model_path(self):
+        response = TestClient(app).post("/api/v1/score", json={"source": "archimate"})
+        assert response.status_code == 400
 
 
 class TestAPIModel:

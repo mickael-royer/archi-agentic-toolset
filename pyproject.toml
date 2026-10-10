@@ -18,6 +18,7 @@ dependencies = [
     "google-genai>=0.8.0",
     "cachetools>=5.0.0",
     "python-dotenv>=1.0.0",
+    "mcp>=1.2.0",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +32,7 @@ dev = [
 
 [project.scripts]
 archi-c4 = "archi_c4_score.cli:main"
+archi-c4-mcp = "archi_c4_score.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/archi_c4_score"]

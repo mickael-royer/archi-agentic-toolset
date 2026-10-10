@@ -102,6 +102,9 @@ class ContainerScore:
     coupling: float
     component_count: int
     stereotype: str = ""
+    afferent_coupling: int = 0
+    efferent_coupling: int = 0
+    instability_index: float = 0.0
 
 
 @dataclass

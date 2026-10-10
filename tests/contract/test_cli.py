@@ -1,5 +1,7 @@
 """Contract tests for CLI interface."""
 
+import json
+
 from click.testing import CliRunner
 from archi_c4_score.cli import cli
 
@@ -48,11 +50,38 @@ class TestCLIScore:
         result = runner.invoke(cli, ["--help"])
         assert "score" in result.output
 
-    def test_score_requires_commit(self):
-        """Score requires commit SHA."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["score"])
+    def test_score_icepanel_json(self, icepanel_fixture_source):
+        """Score defaults to the IcePanel source and latest version."""
+        result = CliRunner().invoke(cli, ["--json", "score"], obj={})
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["source"] == "icepanel" and data["composite_score"] == 50.4
+
+    def test_score_text_lists_containers(self, icepanel_fixture_source):
+        result = CliRunner().invoke(cli, ["score", "--version", "v2"], obj={})
+        assert result.exit_code == 0, result.output
+        assert "Backend" in result.output and "v2" in result.output
+
+    def test_score_archimate_needs_model_path(self):
+        result = CliRunner().invoke(cli, ["score", "--source", "archimate"], obj={})
         assert result.exit_code != 0
+
+    def test_compare_versions(self, icepanel_fixture_source):
+        result = CliRunner().invoke(cli, ["--json", "compare-versions", "v1", "v2"], obj={})
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.output)["system_delta"] == 0.0
+
+    def test_dashboard_icepanel_writes_hugo_data(self, icepanel_fixture_source, tmp_path):
+        result = CliRunner().invoke(
+            cli,
+            ["dashboard", "--source", "icepanel", "--format", "hugo", "--output", str(tmp_path)],
+            obj={},
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads((tmp_path / "data" / "timeline.json").read_text())
+        assert [c["sha"] for c in data["commits"]] == ["v1", "v2", "latest"]
+        assert data["c4_scoring"]["source"] == "icepanel"
+        assert any(cell["name"] == "Backend" for cell in data["c4_scoring"]["treemap"])
 
 
 class TestCLIHistory:

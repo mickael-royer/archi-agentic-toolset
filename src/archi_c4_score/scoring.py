@@ -1,18 +1,45 @@
 """Architecture scoring engine for C4 models."""
 
 import logging
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from archi_c4_score.archimate_scorer import ArchimateScorer, ArchitectureMetrics
 from archi_c4_score.archimate_xml_parser import ArchimateXMLParser
+from archi_c4_score.models import (
+    C4Level,
+    C4Node,
+    C4Relationship,
+    ComponentScore,
+    ContainerScore,
+    ScoringReport,
+)
 from archi_c4_score.parser import CoArchi2Parser
 
 if TYPE_CHECKING:
+    from archi_c4_score.c4_converter import C4ConversionResult
     from archi_c4_score.repository import Repository
 
 logger = logging.getLogger(__name__)
+
+# Relation weights: sync (Flow / IcePanel "Sync") weighs more than async (Triggering / "Async").
+SYNC_WEIGHT = 1.5
+ASYNC_WEIGHT = 1.0
+
+
+def coupling_band(weighted_total: float) -> float:
+    """Map a weighted dependency count to a coupling score on the 30-70 scale."""
+    if weighted_total <= 1:
+        return 30.0
+    if weighted_total <= 3:
+        return 40.0
+    if weighted_total <= 6:
+        return 50.0
+    if weighted_total <= 10:
+        return 60.0
+    return 70.0
 
 
 class InstabilityCalculator:
@@ -134,6 +161,168 @@ class RecommendationGenerator:
                 )
             )
         return recs
+
+
+@dataclass
+class _Coupling:
+    """Distinct dependents/dependencies and weighted total for one node."""
+
+    dependents: set[str] = field(default_factory=set)
+    dependencies: set[str] = field(default_factory=set)
+    weighted_total: float = 0.0
+
+    @property
+    def instability(self) -> float:
+        total = len(self.dependents) + len(self.dependencies)
+        return len(self.dependencies) / total if total else 0.5
+
+
+def _coupling_by_node(edges: set[tuple[str, str, str, float]]) -> dict[str, _Coupling]:
+    result: dict[str, _Coupling] = {}
+    for source, target, _, weight in edges:
+        out = result.setdefault(source, _Coupling())
+        out.dependencies.add(target)
+        out.weighted_total += weight
+        inc = result.setdefault(target, _Coupling())
+        inc.dependents.add(source)
+        inc.weighted_total += weight
+    return result
+
+
+class C4ModelScorer:
+    """Score a source-neutral C4 model in memory (IcePanel, or any ModelSource).
+
+    Same formulas as the legacy Neo4j path: weighted dependencies -> coupling_band,
+    composite = 100 - coupling, instability = Ce / (Ca + Ce).
+    """
+
+    def score(self, model: "C4ConversionResult", version: str = "latest") -> ScoringReport:
+        nodes = {n.id: n for n in model.nodes}
+        scored = {n.id for n in model.nodes if self._is_scored(n)}
+        containers = [n for n in model.nodes if n.id in scored and n.c4_level == C4Level.CONTAINER]
+        components = [n for n in model.nodes if n.id in scored and n.c4_level == C4Level.COMPONENT]
+
+        component_edges = {self._edge(r) for r in model.relationships if r.source_id != r.target_id}
+        container_edges = set()
+        for source, target, rel_type, weight in component_edges:
+            lifted = (self._container_of(source, nodes), self._container_of(target, nodes))
+            if lifted[0] != lifted[1]:
+                container_edges.add((lifted[0], lifted[1], rel_type, weight))
+
+        container_coupling = _coupling_by_node(container_edges)
+        component_coupling = _coupling_by_node(component_edges)
+        children = [c.parent_id for c in components]
+
+        container_scores = [
+            self._container_score(n, container_coupling.get(n.id, _Coupling()), children.count(n.id))
+            for n in containers
+        ]
+        component_scores = [
+            self._component_score(n, component_coupling.get(n.id, _Coupling()), nodes)
+            for n in components
+        ]
+
+        engine = ScoringEngine()
+        system_score = engine.aggregate_scores([c.composite for c in container_scores])
+        scored_container_ids = {n.id for n in containers}
+        container_graph = [
+            (s, t) for s, t, _, _ in container_edges
+            if s in scored_container_ids and t in scored_container_ids
+        ]
+        if engine.detect_cycle(container_graph):
+            system_score = engine.apply_cycle_penalty(system_score)
+
+        return ScoringReport(
+            report_id=str(uuid4()),
+            timestamp=datetime.now(timezone.utc),
+            git_commit=version,
+            composite_score=round(system_score, 2),
+            system_score=round(system_score, 2),
+            container_scores=container_scores,
+            component_scores=component_scores,
+            recommendations=[],
+        )
+
+    @staticmethod
+    def _is_scored(node: C4Node) -> bool:
+        return (node.properties or {}).get("scored", "true") != "false"
+
+    @staticmethod
+    def _edge(rel: C4Relationship) -> tuple[str, str, str, float]:
+        return (rel.source_id, rel.target_id, rel.rel_type or rel.relationship_type, rel.weight)
+
+    @staticmethod
+    def _container_of(node_id: str, nodes: dict[str, C4Node]) -> str:
+        node = nodes.get(node_id)
+        if node and node.c4_level == C4Level.COMPONENT and node.parent_id in nodes:
+            return node.parent_id  # type: ignore[return-value]
+        return node_id
+
+    @staticmethod
+    def _container_score(node: C4Node, c: _Coupling, component_count: int) -> ContainerScore:
+        coupling = coupling_band(c.weighted_total)
+        return ContainerScore(
+            node_id=node.id,
+            node_name=node.name,
+            composite=100.0 - coupling,
+            coupling=coupling,
+            component_count=component_count,
+            stereotype=(node.properties or {}).get("type", ""),
+            afferent_coupling=len(c.dependents),
+            efferent_coupling=len(c.dependencies),
+            instability_index=c.instability,
+        )
+
+    @staticmethod
+    def _component_score(node: C4Node, c: _Coupling, nodes: dict[str, C4Node]) -> ComponentScore:
+        coupling = coupling_band(c.weighted_total)
+        parent = nodes.get(node.parent_id or "")
+        return ComponentScore(
+            node_id=node.id,
+            node_name=node.name,
+            composite=100.0 - coupling,
+            coupling=coupling,
+            instability_index=c.instability,
+            efferent_coupling=len(c.dependencies),
+            afferent_coupling=len(c.dependents),
+            parent=parent.name if parent else "",
+        )
+
+
+def compare_reports(before: ScoringReport, after: ScoringReport) -> dict[str, Any]:
+    """Per-container composite deltas between two scoring reports, matched by node id."""
+    old = {c.node_id: c for c in before.container_scores}
+    new = {c.node_id: c for c in after.container_scores}
+    containers = []
+    for node_id in sorted(old.keys() | new.keys(), key=lambda i: (new.get(i) or old[i]).node_name):
+        o, n = old.get(node_id), new.get(node_id)
+        before_score = o.composite if o else None
+        after_score = n.composite if n else None
+        if o is None:
+            status = "added"
+        elif n is None:
+            status = "removed"
+        else:
+            status = "unchanged" if before_score == after_score else "changed"
+        containers.append(
+            {
+                "name": (n or o).node_name,  # type: ignore[union-attr]
+                "before": before_score,
+                "after": after_score,
+                "delta": (after_score - before_score)
+                if before_score is not None and after_score is not None
+                else None,
+                "status": status,
+            }
+        )
+    return {
+        "from_version": before.git_commit,
+        "to_version": after.git_commit,
+        "system_before": before.composite_score,
+        "system_after": after.composite_score,
+        "system_delta": round(after.composite_score - before.composite_score, 2),
+        "containers": containers,
+    }
 
 
 class BackfillOrchestrator:
@@ -337,19 +526,11 @@ ORDER BY e.stereotype, e.name
                 trigger_out = record.get("trigger_out", 0) or 0
                 trigger_in = record.get("trigger_in", 0) or 0
 
-                weighted_total = (flow_in + flow_out) * 1.5 + (trigger_in + trigger_out) * 1.0
+                weighted_total = (flow_in + flow_out) * SYNC_WEIGHT + (
+                    trigger_in + trigger_out
+                ) * ASYNC_WEIGHT
 
-                # Calculate coupling: 30-70 scale based on weighted dependencies
-                if weighted_total <= 1:
-                    coupling = 30.0
-                elif weighted_total <= 3:
-                    coupling = 40.0
-                elif weighted_total <= 6:
-                    coupling = 50.0
-                elif weighted_total <= 10:
-                    coupling = 60.0
-                else:
-                    coupling = 70.0
+                coupling = coupling_band(weighted_total)
 
                 containers.append(
                     ContainerScore(
@@ -435,19 +616,11 @@ ORDER BY e.stereotype, e.name
                 trigger_out = record.get("trigger_out", 0) or 0
                 trigger_in = record.get("trigger_in", 0) or 0
 
-                weighted_total = (flow_in + flow_out) * 1.5 + (trigger_in + trigger_out) * 1.0
+                weighted_total = (flow_in + flow_out) * SYNC_WEIGHT + (
+                    trigger_in + trigger_out
+                ) * ASYNC_WEIGHT
 
-                # Calculate coupling: 30-70 scale based on weighted dependencies
-                if weighted_total <= 1:
-                    coupling = 30.0
-                elif weighted_total <= 3:
-                    coupling = 40.0
-                elif weighted_total <= 6:
-                    coupling = 50.0
-                elif weighted_total <= 10:
-                    coupling = 60.0
-                else:
-                    coupling = 70.0
+                coupling = coupling_band(weighted_total)
 
                 total = afferent + efferent
                 instability = efferent / total if total > 0 else 0.5
